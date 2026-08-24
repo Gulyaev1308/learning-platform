@@ -441,9 +441,9 @@ function LessonForm({ lesson, onSave, onCancel }: any) {
                         <div key={oIndex} className="flex items-center gap-2">
                           <input
                             type="radio"
-                            name={`correct_${qIndex}`}
-                            checked={q.correctAnswer === oIndex}
-                            onChange={() => updateQuestion(qIndex, 'correctAnswer', oIndex)}
+                            
+                            
+                            
                             className="flex-shrink-0"
                             title="Правильный ответ"
                           />
