@@ -1,7 +1,4 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { writeFile, mkdir } from 'fs/promises';
-import path from 'path';
-import fs from 'fs';
 import { getSession } from '@/lib/auth';
 
 export async function POST(request: NextRequest) {
@@ -18,24 +15,20 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Файл не найден' }, { status: 400 });
     }
 
-    const ext = path.extname(file.name) || '.mp4';
-    const fileName = `video_${Date.now()}${ext}`;
-    
-    // Используем /tmp для Render
-    const tmpDir = '/tmp/videos';
-    if (!fs.existsSync(tmpDir)) {
-      await mkdir(tmpDir, { recursive: true });
-    }
-
-    const filePath = path.join(tmpDir, fileName);
+    // Конвертируем в base64
     const buffer = Buffer.from(await file.arrayBuffer());
-    await writeFile(filePath, buffer);
+    const base64 = buffer.toString('base64');
+    const mimeType = file.type || 'video/mp4';
 
-    console.log('Saved to tmp:', filePath);
+    console.log('File size:', buffer.length, 'type:', mimeType);
+
+    // Возвращаем data URL
+    const dataUrl = `data:${mimeType};base64,${base64}`;
 
     return NextResponse.json({ 
       success: true, 
-      url: `/api/videos/${fileName}`,
+      url: dataUrl,
+      size: buffer.length,
     });
   } catch (error) {
     console.error('Upload error:', error);
