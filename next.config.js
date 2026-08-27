@@ -3,7 +3,7 @@ const nextConfig = {
   serverExternalPackages: ['better-sqlite3'],
   turbopack: {},
   experimental: {
-    proxyClientMaxBodySize: '100mb',
+    proxyClientMaxBodySize: '1000mb',
   },
 }
 
