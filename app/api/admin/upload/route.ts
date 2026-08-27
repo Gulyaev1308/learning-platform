@@ -1,10 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { writeFile, mkdir } from 'fs/promises';
-import path from 'path';
-import fs from 'fs';
+import db from '@/lib/db';
 import { getSession } from '@/lib/auth';
-
-export const maxDuration = 300;
 
 export async function POST(request: NextRequest) {
   try {
@@ -16,29 +12,21 @@ export async function POST(request: NextRequest) {
     const formData = await request.formData();
     const file = formData.get('file') as File;
 
-    if (!file) {
-      return NextResponse.json({ error: 'Файл не найден' }, { status: 400 });
-    }
+    if (!file) return NextResponse.json({ error: 'Файл не найден' }, { status: 400 });
 
-    const ext = path.extname(file.name) || '.mp4';
-    const fileName = `video_${Date.now()}${ext}`;
-    
-    // Сохраняем в /tmp (Render позволяет писать в /tmp)
-    const tmpDir = '/tmp/videos';
-    if (!fs.existsSync(tmpDir)) {
-      await mkdir(tmpDir, { recursive: true });
-    }
-
-    const filePath = path.join(tmpDir, fileName);
     const buffer = Buffer.from(await file.arrayBuffer());
-    await writeFile(filePath, buffer);
+    
+    // Сохраняем в PostgreSQL
+    const result = await db.query(
+      'INSERT INTO videos (filename, data, content_type) VALUES ($1, $2, $3) RETURNING id',
+      [file.name, buffer, file.type || 'video/mp4']
+    );
 
-    console.log('✅ Saved:', filePath, buffer.length);
+    const videoId = result.rows[0].id;
 
     return NextResponse.json({ 
       success: true, 
-      url: `/api/videos/${fileName}`,
-      size: buffer.length,
+      url: `/api/videos/${videoId}`,
     });
   } catch (error) {
     console.error('Upload error:', error);
