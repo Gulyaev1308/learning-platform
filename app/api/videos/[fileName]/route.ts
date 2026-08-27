@@ -14,8 +14,8 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
 
   const buffer = video.data as Buffer;
   const totalLength = buffer.length;
+  const uint8Array = new Uint8Array(buffer);
 
-  // Поддержка Range requests для перемотки
   const rangeHeader = request.headers.get('range');
 
   if (rangeHeader) {
@@ -23,7 +23,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     const start = parseInt(parts[0]);
     const end = parts[1] ? parseInt(parts[1]) : totalLength - 1;
     const chunkSize = end - start + 1;
-    const chunk = buffer.subarray(start, end + 1);
+    const chunk = uint8Array.slice(start, end + 1);
 
     return new NextResponse(chunk, {
       status: 206,
@@ -32,18 +32,15 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
         'Content-Range': `bytes ${start}-${end}/${totalLength}`,
         'Accept-Ranges': 'bytes',
         'Content-Length': chunkSize.toString(),
-        'Cache-Control': 'no-cache',
       },
     });
   }
 
-  // Полный ответ
-  return new NextResponse(buffer, {
+  return new NextResponse(uint8Array, {
     headers: {
       'Content-Type': video.content_type || 'video/mp4',
       'Content-Length': totalLength.toString(),
       'Accept-Ranges': 'bytes',
-      'Cache-Control': 'no-cache',
     },
   });
 }
