@@ -21,7 +21,7 @@ export async function GET(request: NextRequest) {
     }
 
     // Получаем всех учеников этого лидера
-    const students = db.prepare(`
+    const students = (await db.query(`
       SELECT 
         u.id,
         u.email,
@@ -36,10 +36,10 @@ export async function GET(request: NextRequest) {
          LIMIT 1) as last_lesson
       FROM users u
       LEFT JOIN progress p ON p.user_id = u.id AND p.status = 'completed'
-      WHERE u.leader_id = ? AND u.role = 'student'
+      WHERE u.leader_id = $1 AND u.role = 'student'
       GROUP BY u.id
       ORDER BY u.created_at DESC
-    `).all(session.userId) as any[];
+    `, [session.userId])).rows as any[];
 
     // Рассчитываем процент для каждого ученика
     const studentsWithProgress = students.map(student => ({

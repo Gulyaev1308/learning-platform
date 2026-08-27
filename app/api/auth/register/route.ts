@@ -32,7 +32,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Проверка существования email
-    const existingUser = db.prepare('SELECT id FROM users WHERE email = ?').get(email);
+    const existingUser = (await db.query('SELECT id FROM users WHERE email = $1', [email])).rows[0];
     if (existingUser) {
       return NextResponse.json(
         { error: 'Пользователь с таким email уже существует' },
@@ -43,7 +43,7 @@ export async function POST(request: NextRequest) {
     // Проверка leader_id если передан
     let leaderIdValue = null;
     if (leaderId) {
-      const leader = db.prepare('SELECT id FROM users WHERE id = ? AND role = ?').get(leaderId, 'leader');
+      const leader = (await db.query('SELECT id FROM users WHERE id = $1 AND role = $2', [leaderId, 'leader'])).rows[0];
       if (!leader) {
         return NextResponse.json(
           { error: 'Указанный лидер не найден' },
@@ -61,7 +61,7 @@ export async function POST(request: NextRequest) {
       'INSERT INTO users (email, password_hash, name, role, leader_id) VALUES (?, ?, ?, ?, ?)'
     ).run(email, passwordHash, name, 'student', leaderIdValue);
 
-    const userId = result.lastInsertRowid;
+    const userId = result.rows[0].id;
 
     // Создание сессии
     await createSession({

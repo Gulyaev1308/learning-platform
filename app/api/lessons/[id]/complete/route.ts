@@ -20,7 +20,7 @@ export async function POST(
     const lessonId = parseInt(id);
 
     // Проверяем существование урока
-    const lesson = db.prepare('SELECT * FROM lessons WHERE id = ?').get(lessonId) as any;
+    const lesson = (await db.query('SELECT * FROM lessons WHERE id = $1', [lessonId])).rows[0] as any;
 
     if (!lesson) {
       return NextResponse.json(

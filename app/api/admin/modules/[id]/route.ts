@@ -14,7 +14,7 @@ export async function PUT(
   const { id } = await params;
   const { title } = await request.json();
 
-  db.prepare('UPDATE modules SET title = ? WHERE id = ?').run(title, id);
+  await db.query('UPDATE modules SET title = $1 WHERE id = $2', [title, id]);
   return NextResponse.json({ success: true });
 }
 
@@ -29,8 +29,8 @@ export async function DELETE(
 
   const { id } = await params;
 
-  db.prepare('DELETE FROM lessons WHERE module_id = ?').run(id);
-  db.prepare('DELETE FROM modules WHERE id = ?').run(id);
+  await db.query('DELETE FROM lessons WHERE module_id = $1', [id]);
+  await db.query('DELETE FROM modules WHERE id = $1', [id]);
 
   return NextResponse.json({ success: true });
 }

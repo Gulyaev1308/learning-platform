@@ -21,7 +21,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Пароль должен быть минимум 6 символов' }, { status: 400 });
     }
 
-    const existingUser = db.prepare('SELECT id FROM users WHERE email = ?').get(email);
+    const existingUser = (await db.query('SELECT id FROM users WHERE email = $1', [email])).rows[0];
     if (existingUser) {
       return NextResponse.json({ error: 'Пользователь с таким email уже существует' }, { status: 400 });
     }
@@ -33,7 +33,7 @@ export async function POST(request: NextRequest) {
     ).run(email, passwordHash, name, 'leader');
 
     await createSession({
-      userId: Number(result.lastInsertRowid),
+      userId: Number(result.rows[0].id),
       email,
       name,
       role: 'leader',

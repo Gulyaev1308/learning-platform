@@ -14,7 +14,7 @@ export async function PUT(
   const { id } = await params;
   const { title } = await request.json();
 
-  db.prepare('UPDATE blocks SET title = ? WHERE id = ?').run(title, id);
+  await db.query('UPDATE blocks SET title = $1 WHERE id = $2', [title, id]);
   return NextResponse.json({ success: true });
 }
 
@@ -30,13 +30,13 @@ export async function DELETE(
   const { id } = await params;
 
   // Удаляем связанные модули и уроки
-  const modules = db.prepare('SELECT id FROM modules WHERE block_id = ?').all(id) as any[];
+  const modules = (await db.query('SELECT id FROM modules WHERE block_id = $1', [id])).rows as any[];
   for (const mod of modules) {
-    db.prepare('DELETE FROM lessons WHERE module_id = ?').run(mod.id);
+    await db.query('DELETE FROM lessons WHERE module_id = $1', [mod.id]);
   }
-  db.prepare('DELETE FROM modules WHERE block_id = ?').run(id);
-  db.prepare('DELETE FROM lessons WHERE block_id = ?').run(id);
-  db.prepare('DELETE FROM blocks WHERE id = ?').run(id);
+  await db.query('DELETE FROM modules WHERE block_id = $1', [id]);
+  await db.query('DELETE FROM lessons WHERE block_id = $1', [id]);
+  await db.query('DELETE FROM blocks WHERE id = $1', [id]);
 
   return NextResponse.json({ success: true });
 }

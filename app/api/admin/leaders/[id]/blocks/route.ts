@@ -13,14 +13,14 @@ export async function GET(
 
   const { id: leaderId } = await params;
 
-  const blocks = db.prepare(`
+  const blocks = (await db.query(`
     SELECT b.*, 
       (SELECT COUNT(*) FROM modules m WHERE m.block_id = b.id) as modules_count,
       (SELECT COUNT(*) FROM lessons l WHERE l.block_id = b.id) as lessons_count
     FROM blocks b
-    WHERE b.leader_id = ?
+    WHERE b.leader_id = $1
     ORDER BY b.order_index
-  `).all(leaderId) as any[];
+  `, [leaderId])).rows as any[];
 
   return NextResponse.json({ success: true, blocks });
 }
@@ -41,5 +41,5 @@ export async function POST(
     'INSERT INTO blocks (leader_id, title, order_index) VALUES (?, ?, ?)'
   ).run(leaderId, title, order_index || 1);
 
-  return NextResponse.json({ success: true, blockId: result.lastInsertRowid });
+  return NextResponse.json({ success: true, blockId: result.rows[0].id });
 }

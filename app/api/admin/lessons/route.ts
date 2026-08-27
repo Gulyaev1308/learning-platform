@@ -25,7 +25,7 @@ export async function POST(request: NextRequest) {
       leader_id || null
     );
 
-    return NextResponse.json({ success: true, lessonId: result.lastInsertRowid });
+    return NextResponse.json({ success: true, lessonId: result.rows[0].id });
   } catch (error) {
     console.error('Error:', error);
     return NextResponse.json({ error: (error as Error).message }, { status: 500 });

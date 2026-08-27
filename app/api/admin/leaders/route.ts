@@ -14,7 +14,7 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    const leaders = db.prepare(`
+    const leaders = (await db.query(`
       SELECT 
         u.id,
         u.email,
@@ -26,7 +26,7 @@ export async function GET(request: NextRequest) {
       WHERE u.role = 'leader'
       GROUP BY u.id
       ORDER BY u.created_at DESC
-    `).all() as any[];
+    `)).rows as any[];
 
     return NextResponse.json({
       success: true,
@@ -62,7 +62,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const existingUser = db.prepare('SELECT id FROM users WHERE email = ?').get(email);
+    const existingUser = (await db.query('SELECT id FROM users WHERE email = $1', [email])).rows[0];
     if (existingUser) {
       return NextResponse.json(
         { error: 'Пользователь с таким email уже существует' },
@@ -78,7 +78,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      leaderId: result.lastInsertRowid,
+      leaderId: result.rows[0].id,
     });
   } catch (error) {
     console.error('Error creating leader:', error);

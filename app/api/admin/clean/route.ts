@@ -9,14 +9,14 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Доступ запрещен' }, { status: 403 });
     }
 
-    db.exec('PRAGMA foreign_keys = OFF');
-    db.exec('DELETE FROM quiz_answers');
-    db.exec('DELETE FROM progress');
-    db.exec('DELETE FROM lessons');
-    db.exec('DELETE FROM modules');
-    db.exec('DELETE FROM blocks');
-    db.exec("DELETE FROM users WHERE role != 'admin'");
-    db.exec('PRAGMA foreign_keys = ON');
+    await db.query('PRAGMA foreign_keys = OFF');
+    await db.query('DELETE FROM quiz_answers');
+    await db.query('DELETE FROM progress');
+    await db.query('DELETE FROM lessons');
+    await db.query('DELETE FROM modules');
+    await db.query('DELETE FROM blocks');
+    await db.query("DELETE FROM users WHERE role != 'admin'");
+    await db.query('PRAGMA foreign_keys = ON');
 
     return NextResponse.json({ success: true, message: 'База очищена' });
   } catch (error) {

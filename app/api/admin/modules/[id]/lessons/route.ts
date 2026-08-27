@@ -13,6 +13,6 @@ export async function GET(
 
   const { id: moduleId } = await params;
 
-  const lessons = db.prepare('SELECT * FROM lessons WHERE module_id = ? ORDER BY order_index').all(moduleId) as any[];
+  const lessons = (await db.query('SELECT * FROM lessons WHERE module_id = $1 ORDER BY order_index', [moduleId])).rows as any[];
   return NextResponse.json({ success: true, lessons });
 }

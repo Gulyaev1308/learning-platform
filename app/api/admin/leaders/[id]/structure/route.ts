@@ -16,7 +16,7 @@ export async function GET(
     const { id: leaderId } = await params;
 
     // Получаем всё одним запросом
-    const structure = db.prepare(`
+    const structure = (await db.query(`
       SELECT 
         b.id as block_id,
         b.title as block_title,
@@ -33,9 +33,9 @@ export async function GET(
       FROM blocks b
       LEFT JOIN modules m ON m.block_id = b.id
       LEFT JOIN lessons l ON l.module_id = m.id
-      WHERE b.leader_id = ?
+      WHERE b.leader_id = $1
       ORDER BY b.order_index, m.order_index, l.order_index
-    `).all(leaderId) as any[];
+    `, [leaderId])).rows as any[];
 
     // Группируем в структуру
     const blocksMap = new Map();

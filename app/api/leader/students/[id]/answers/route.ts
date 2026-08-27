@@ -43,7 +43,7 @@ export async function GET(
     ).all() as any[];
 
     // Получаем ответы ученика на опросы
-    const answers = db.prepare(`
+    const answers = (await db.query(`
       SELECT 
         qa.id,
         qa.answer,
@@ -52,9 +52,9 @@ export async function GET(
         l.title as lesson_title
       FROM quiz_answers qa
       INNER JOIN lessons l ON qa.lesson_id = l.id
-      WHERE qa.user_id = ?
+      WHERE qa.user_id = $1
       ORDER BY qa.created_at DESC
-    `).all(studentId) as any[];
+    `, [studentId])).rows as any[];
 
     // Формируем ответы с вопросами
     const parsedAnswers = quizLessons.map(quiz => {

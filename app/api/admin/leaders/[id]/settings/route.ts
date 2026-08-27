@@ -15,11 +15,11 @@ export async function GET(
 
     const { id: leaderId } = await params;
 
-    let settings = db.prepare('SELECT * FROM leader_settings WHERE leader_id = ?').get(leaderId) as any;
+    let settings = (await db.query('SELECT * FROM leader_settings WHERE leader_id = $1', [leaderId])).rows[0] as any;
 
     if (!settings) {
-      db.prepare('INSERT INTO leader_settings (leader_id) VALUES (?)').run(leaderId);
-      settings = db.prepare('SELECT * FROM leader_settings WHERE leader_id = ?').get(leaderId) as any;
+      await db.query('INSERT INTO leader_settings (leader_id) VALUES ($1)', [leaderId]);
+      settings = (await db.query('SELECT * FROM leader_settings WHERE leader_id = $1', [leaderId])).rows[0] as any;
     }
 
     return NextResponse.json({ success: true, settings });
@@ -43,16 +43,16 @@ export async function PUT(
     const body = await request.json();
     const { block1_name, block2_name, module1_name, module2_name, lesson_name } = body;
 
-    db.prepare(`
+    await db.query(`
       INSERT INTO leader_settings (leader_id, block1_name, block2_name, module1_name, module2_name, lesson_name)
-      VALUES (?, ?, ?, ?, ?, ?)
+      VALUES ($1, $2, $3, $4, $5, $6)
       ON CONFLICT(leader_id) DO UPDATE SET
         block1_name = excluded.block1_name,
         block2_name = excluded.block2_name,
         module1_name = excluded.module1_name,
         module2_name = excluded.module2_name,
         lesson_name = excluded.lesson_name
-    `).run(leaderId, block1_name, block2_name, module1_name, module2_name, lesson_name);
+    `, [leaderId, block1_name, block2_name, module1_name, module2_name, lesson_name]);
 
     return NextResponse.json({ success: true });
   } catch (error) {

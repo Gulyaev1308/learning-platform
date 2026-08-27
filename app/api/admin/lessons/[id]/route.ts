@@ -41,9 +41,9 @@ export async function DELETE(
     const { id } = await params;
     const lessonId = parseInt(id);
 
-    db.prepare('DELETE FROM progress WHERE lesson_id = ?').run(lessonId);
-    db.prepare('DELETE FROM quiz_answers WHERE lesson_id = ?').run(lessonId);
-    db.prepare('DELETE FROM lessons WHERE id = ?').run(lessonId);
+    await db.query('DELETE FROM progress WHERE lesson_id = $1', [lessonId]);
+    await db.query('DELETE FROM quiz_answers WHERE lesson_id = $1', [lessonId]);
+    await db.query('DELETE FROM lessons WHERE id = $1', [lessonId]);
 
     return NextResponse.json({ success: true });
   } catch (error) {

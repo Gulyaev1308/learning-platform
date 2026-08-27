@@ -16,7 +16,7 @@ export async function GET(
     const { id } = await params;
     const lessonId = parseInt(id);
 
-    const lesson = db.prepare('SELECT * FROM lessons WHERE id = ?').get(lessonId) as any;
+    const lesson = (await db.query('SELECT * FROM lessons WHERE id = $1', [lessonId])).rows[0] as any;
 
     if (!lesson) {
       return NextResponse.json({ error: 'Урок не найден' }, { status: 404 });

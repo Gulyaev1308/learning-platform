@@ -7,7 +7,7 @@ export async function GET(request: NextRequest) {
     const session = await getSession();
     if (!session) return NextResponse.json({ error: 'Не авторизован' }, { status: 401 });
 
-    const user = db.prepare('SELECT * FROM users WHERE id = ?').get(session.userId) as any;
+    const user = (await db.query('SELECT * FROM users WHERE id = $1', [session.userId])).rows[0] as any;
     const leaderId = user?.role === 'student' ? user.leader_id : user?.id;
 
     console.log('User:', user?.id, user?.role, 'leaderId:', leaderId);
