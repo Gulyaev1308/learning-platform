@@ -10,9 +10,10 @@ if (!fs.existsSync(path.dirname(dbPath))) {
 
 const db = new Database(dbPath);
 db.pragma('journal_mode = WAL');
-db.pragma('foreign_keys = ON');
 
-// Создаем таблицы если их нет
+// ВАЖНО: Удаляем старую таблицу и создаем новую
+db.exec('DROP TABLE IF EXISTS lessons');
+
 db.exec(`
   CREATE TABLE IF NOT EXISTS users (
     id INTEGER PRIMARY KEY AUTOINCREMENT,

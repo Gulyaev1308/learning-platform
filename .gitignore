@@ -51,3 +51,6 @@ database/*.db-shm
 # Env
 .env.local
 .env.production
+database/*.db
+database/*.db-wal
+database/*.db-shm
