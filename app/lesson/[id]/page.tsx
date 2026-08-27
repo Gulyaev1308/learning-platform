@@ -93,14 +93,14 @@ export default function LessonPage() {
     }
   };
 
-  const handleQuizAnswer = async (answer: string) => {
+  const handleQuizAnswer = async (answers: any[]) => {
     try {
       const response = await fetch(`/api/lessons/${lessonId}/quiz`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ answer }),
+        body: JSON.stringify({ answers }),
       });
 
       const data = await response.json();
