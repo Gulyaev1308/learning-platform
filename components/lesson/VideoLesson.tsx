@@ -8,33 +8,50 @@ interface VideoLessonProps {
 export default function VideoLesson({ content, title, onEnded, onStart }: VideoLessonProps) {
   console.log('VideoLesson content:', content);
 
-  // Google Drive
+  // Google Drive — используем прямую ссылку для скачивания
   if (content && content.includes('drive.google.com')) {
     const match = content.match(/\/d\/([^/]+)/) || content.match(/id=([^&]+)/);
     const fileId = match ? match[1] : '';
-    
-    console.log('Drive fileId:', fileId);
 
-    if (!fileId) {
-      return <p className="text-red-600">Неверная ссылка Google Drive</p>;
-    }
+    // Прямая ссылка на видео
+    const directUrl = `https://drive.google.com/uc?export=download&id=${fileId}`;
+    
+    // Альтернативная ссылка для просмотра
+    const previewUrl = `https://drive.google.com/file/d/${fileId}/preview`;
 
     return (
       <div className="space-y-4">
+        {/* Пробуем HTML5 video с прямой ссылкой */}
         <div className="bg-black rounded-lg overflow-hidden aspect-video">
-          <iframe
-            src={`https://drive.google.com/file/d/${fileId}/preview`}
+          <video
+            controls
             className="w-full h-full"
-            allow="autoplay; fullscreen"
-            allowFullScreen
-          />
+            src={directUrl}
+            onEnded={onEnded}
+            onPlay={onStart}
+            preload="metadata"
+          >
+            Ваш браузер не поддерживает видео.
+          </video>
         </div>
-        <button
-          onClick={onEnded}
-          className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 rounded-lg"
-        >
-          ✅ Я посмотрел видео
-        </button>
+
+        {/* Кнопки */}
+        <div className="flex gap-3">
+          <a
+            href={previewUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 rounded-lg text-center"
+          >
+            🎬 Открыть в Google Drive
+          </a>
+          <button
+            onClick={onEnded}
+            className="flex-1 bg-green-600 hover:bg-green-700 text-white font-bold py-3 rounded-lg"
+          >
+            ✅ Я посмотрел видео
+          </button>
+        </div>
       </div>
     );
   }
