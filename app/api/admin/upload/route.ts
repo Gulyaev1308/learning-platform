@@ -18,20 +18,31 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Файл не найден' }, { status: 400 });
     }
 
+    console.log('Original name:', file.name);
+
+    // Получаем расширение
+    const ext = path.extname(file.name) || '.mp4';
+    
+    // Создаем безопасное имя
+    const timestamp = Date.now();
+    const safeName = `video_${timestamp}${ext}`;
+    
     const videosDir = path.join(process.cwd(), 'public', 'videos');
     if (!fs.existsSync(videosDir)) {
       await mkdir(videosDir, { recursive: true });
     }
 
-    const timestamp = Date.now();
-    const safeName = file.name.replace(/[^\w\-.]/g, '_');
-    const finalName = `${timestamp}_${safeName}`;
-    const filePath = path.join(videosDir, finalName);
-
+    const filePath = path.join(videosDir, safeName);
     const buffer = Buffer.from(await file.arrayBuffer());
     await writeFile(filePath, buffer);
 
-    return NextResponse.json({ success: true, url: `/videos/${finalName}` });
+    console.log('✅ Saved as:', safeName);
+
+    return NextResponse.json({ 
+      success: true, 
+      url: `/videos/${safeName}`,
+      fileName: safeName,
+    });
   } catch (error) {
     console.error('Upload error:', error);
     return NextResponse.json({ error: 'Ошибка: ' + (error as Error).message }, { status: 500 });
