@@ -109,7 +109,15 @@ export default function AdminPage() {
       </div>
 
       <div className="max-w-7xl mx-auto px-4 py-6">
-        <button onClick={() => setShowLeaderForm(true)} className="mb-6 bg-blue-600 text-white font-bold py-2 px-6 rounded-lg">+ Создать лидера</button>
+        <div className="flex gap-3 mb-6">
+  <button onClick={() => setShowLeaderForm(true)} className="bg-blue-600 text-white font-bold py-2 px-6 rounded-lg">+ Создать лидера</button>
+  <button onClick={async () => {
+    const res = await fetch('/api/admin/clean', { method: 'POST' });
+    const data = await res.json();
+    alert(data.message || data.error || 'Готово');
+    location.reload();
+  }} className="bg-red-600 text-white font-bold py-2 px-6 rounded-lg">🗑 Очистить базу</button>
+</div>
 
         <div className="grid grid-cols-1 lg:grid-cols-4 gap-4">
           <div>
