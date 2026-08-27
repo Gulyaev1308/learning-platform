@@ -4,42 +4,10 @@ import { useEffect, useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import LogoutButton from '@/components/ui/LogoutButton';
 
-interface Leader {
-  id: number;
-  email: string;
-  name: string;
-  students_count: number;
-}
-
-interface Block {
-  id: number;
-  title: string;
-  order_index: number;
-  modules: Module[];
-}
-
-interface Module {
-  id: number;
-  title: string;
-  order_index: number;
-  lessons: Lesson[];
-}
-
-interface Lesson {
-  id: number;
-  title: string;
-  type: string;
-  content: string;
-  description: string;
-  quiz_data?: string;
-  homework_data?: string;
-  order_index: number;
-}
-
-interface QuizQuestion {
-  question: string;
-  options: string[];
-}
+interface Leader { id: number; email: string; name: string; students_count: number; }
+interface Block { id: number; title: string; order_index: number; modules: Module[]; }
+interface Module { id: number; title: string; order_index: number; lessons: Lesson[]; }
+interface Lesson { id: number; title: string; type: string; content: string; description: string; quiz_data?: string; homework_data?: string; order_index: number; }
 
 export default function AdminPage() {
   const router = useRouter();
@@ -47,7 +15,6 @@ export default function AdminPage() {
   const [selectedLeader, setSelectedLeader] = useState<Leader | null>(null);
   const [structure, setStructure] = useState<Block[]>([]);
   const [loading, setLoading] = useState(true);
-  const [loadingStructure, setLoadingStructure] = useState(false);
   const [showLeaderForm, setShowLeaderForm] = useState(false);
   const [showBlockForm, setShowBlockForm] = useState(false);
   const [showModuleForm, setShowModuleForm] = useState(false);
@@ -61,21 +28,19 @@ export default function AdminPage() {
   const fetchLeaders = useCallback(async () => {
     try {
       const response = await fetch('/api/admin/leaders');
-      if (response.status === 403) { router.push('/leader'); return; }
       const data = await response.json();
       setLeaders(data.leaders || []);
     } catch (err) { console.error(err); } finally { setLoading(false); }
-  }, [router]);
+  }, []);
 
   useEffect(() => { fetchLeaders(); }, [fetchLeaders]);
 
   const fetchStructure = useCallback(async (leaderId: number) => {
-    setLoadingStructure(true);
     try {
       const response = await fetch(`/api/admin/leaders/${leaderId}/structure`);
       const data = await response.json();
       setStructure(data.structure || []);
-    } catch (err) { console.error(err); } finally { setLoadingStructure(false); }
+    } catch (err) { console.error(err); }
   }, []);
 
   const handleSelectLeader = (leader: Leader) => {
@@ -85,55 +50,51 @@ export default function AdminPage() {
     fetchStructure(leader.id);
   };
 
-  const refreshStructure = () => {
-    if (selectedLeader) fetchStructure(selectedLeader.id);
-  };
+  const refresh = () => { if (selectedLeader) fetchStructure(selectedLeader.id); };
 
   const handleSaveBlock = async (data: any) => {
     if (!selectedLeader) return;
     const url = data.id ? `/api/admin/blocks/${data.id}` : `/api/admin/leaders/${selectedLeader.id}/blocks`;
     const method = data.id ? 'PUT' : 'POST';
-    const response = await fetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) });
-    if (response.ok) { setShowBlockForm(false); setEditingBlock(null); refreshStructure(); }
+    await fetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) });
+    setShowBlockForm(false); setEditingBlock(null); refresh();
   };
 
   const handleDeleteBlock = async (blockId: number) => {
     if (!confirm('Удалить блок?')) return;
     await fetch(`/api/admin/blocks/${blockId}`, { method: 'DELETE' });
-    refreshStructure();
+    refresh();
   };
 
   const handleSaveModule = async (data: any) => {
     if (!currentBlockId) return;
     const url = data.id ? `/api/admin/modules/${data.id}` : `/api/admin/blocks/${currentBlockId}/modules`;
     const method = data.id ? 'PUT' : 'POST';
-    const response = await fetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) });
-    if (response.ok) { setShowModuleForm(false); setEditingModule(null); refreshStructure(); }
+    await fetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) });
+    setShowModuleForm(false); setEditingModule(null); refresh();
   };
 
   const handleDeleteModule = async (moduleId: number) => {
     if (!confirm('Удалить модуль?')) return;
     await fetch(`/api/admin/modules/${moduleId}`, { method: 'DELETE' });
-    refreshStructure();
+    refresh();
   };
 
   const handleSaveLesson = async (data: any) => {
     if (!currentModuleId) return;
     const url = data.id ? `/api/admin/lessons/${data.id}` : '/api/admin/lessons';
     const method = data.id ? 'PUT' : 'POST';
-    const response = await fetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...data, module_id: currentModuleId, block_id: currentBlockId, leader_id: selectedLeader?.id }) });
-    if (response.ok) { setShowLessonForm(false); setEditingLesson(null); refreshStructure(); }
+    await fetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...data, module_id: currentModuleId, block_id: currentBlockId, leader_id: selectedLeader?.id }) });
+    setShowLessonForm(false); setEditingLesson(null); refresh();
   };
 
   const handleDeleteLesson = async (lessonId: number) => {
     if (!confirm('Удалить урок?')) return;
     await fetch(`/api/admin/lessons/${lessonId}`, { method: 'DELETE' });
-    refreshStructure();
+    refresh();
   };
 
-  if (loading) {
-    return <div className="min-h-screen flex items-center justify-center"><p className="text-gray-900 font-semibold">Загрузка...</p></div>;
-  }
+  if (loading) return <div className="min-h-screen flex items-center justify-center"><p className="text-gray-900 font-semibold">Загрузка...</p></div>;
 
   const selectedBlock = structure.find(b => b.id === currentBlockId);
   const selectedModule = selectedBlock?.modules.find(m => m.id === currentModuleId);
@@ -148,19 +109,7 @@ export default function AdminPage() {
       </div>
 
       <div className="max-w-7xl mx-auto px-4 py-6">
-        <div className="flex gap-3 mb-6">
-          <button onClick={() => setShowLeaderForm(true)} className="bg-blue-600 text-white font-bold py-2 px-6 rounded-lg">
-            + Создать лидера
-          </button>
-          <button onClick={async () => {
-            const res = await fetch('/api/admin/clean', { method: 'POST' });
-            const data = await res.json();
-            if (data.success) { alert('База очищена!'); fetchLeaders(); }
-            else { alert(data.error || 'Ошибка'); }
-          }} className="bg-red-600 text-white font-bold py-2 px-6 rounded-lg">
-            🗑 Очистить базу
-          </button>
-        </div>
+        <button onClick={() => setShowLeaderForm(true)} className="mb-6 bg-blue-600 text-white font-bold py-2 px-6 rounded-lg">+ Создать лидера</button>
 
         <div className="grid grid-cols-1 lg:grid-cols-4 gap-4">
           <div>
@@ -181,19 +130,17 @@ export default function AdminPage() {
               <h2 className="font-bold text-gray-900">Блоки</h2>
               {selectedLeader && <button onClick={() => { setEditingBlock(null); setShowBlockForm(true); }} className="bg-green-600 text-white text-xs px-2 py-1 rounded font-bold">+ Блок</button>}
             </div>
-            {loadingStructure ? <p className="text-gray-700 text-sm">Загрузка...</p> : (
-              <div className="space-y-2 max-h-[600px] overflow-y-auto">
-                {structure.map(block => (
-                  <div key={block.id} className={`p-2 rounded-lg border-2 ${currentBlockId === block.id ? 'border-blue-600 bg-blue-50' : 'border-gray-300 bg-white'}`}>
-                    <div className="flex justify-between items-center gap-1">
-                      <button onClick={() => { setCurrentBlockId(block.id); setCurrentModuleId(null); }} className="font-bold text-gray-900 text-sm flex-1 text-left">{block.title}</button>
-                      <button onClick={() => { setEditingBlock(block); setShowBlockForm(true); }} className="text-blue-700 text-xs">✏️</button>
-                      <button onClick={() => handleDeleteBlock(block.id)} className="text-red-700 text-xs">🗑</button>
-                    </div>
+            <div className="space-y-2 max-h-[600px] overflow-y-auto">
+              {structure.map(block => (
+                <div key={block.id} className={`p-2 rounded-lg border-2 ${currentBlockId === block.id ? 'border-blue-600 bg-blue-50' : 'border-gray-300 bg-white'}`}>
+                  <div className="flex justify-between items-center gap-1">
+                    <button onClick={() => { setCurrentBlockId(block.id); setCurrentModuleId(null); }} className="font-bold text-gray-900 text-sm flex-1 text-left">{block.title}</button>
+                    <button onClick={() => { setEditingBlock(block); setShowBlockForm(true); }} className="text-blue-700 text-xs">✏️</button>
+                    <button onClick={() => handleDeleteBlock(block.id)} className="text-red-700 text-xs">🗑</button>
                   </div>
-                ))}
-              </div>
-            )}
+                </div>
+              ))}
+            </div>
           </div>
 
           <div>
@@ -236,8 +183,8 @@ export default function AdminPage() {
       </div>
 
       {showLeaderForm && <LeaderForm onSave={async (data: any) => {
-        const res = await fetch('/api/admin/leaders', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) });
-        if (res.ok) { setShowLeaderForm(false); fetchLeaders(); }
+        await fetch('/api/admin/leaders', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) });
+        setShowLeaderForm(false); fetchLeaders();
       }} onCancel={() => setShowLeaderForm(false)} />}
 
       {showBlockForm && selectedLeader && <SimpleForm title="Блок" initialValue={editingBlock?.title || ''} onSave={(title: string) => handleSaveBlock({ id: editingBlock?.id, title })} onCancel={() => { setShowBlockForm(false); setEditingBlock(null); }} />}
@@ -295,9 +242,9 @@ function LessonForm({ lesson, onSave, onCancel }: any) {
     order_index: lesson?.order_index || 1,
   });
   const [uploading, setUploading] = useState(false);
-  const [questions, setQuestions] = useState<QuizQuestion[]>([
-    { question: '', options: ['', '', '', ''] }
-  ]);
+  const [quizType, setQuizType] = useState<'options' | 'free_text'>('options');
+  const [questions, setQuestions] = useState<any[]>([{ question: '', options: ['', '', '', ''] }]);
+  const [freeQuestions, setFreeQuestions] = useState<any[]>([{ question: '' }]);
   const [showQuiz, setShowQuiz] = useState(false);
   const [homeworkText, setHomeworkText] = useState('');
   const [showHomework, setShowHomework] = useState(false);
@@ -306,10 +253,14 @@ function LessonForm({ lesson, onSave, onCancel }: any) {
     if (lesson?.quiz_data) {
       try {
         const quiz = JSON.parse(lesson.quiz_data);
-        if (Array.isArray(quiz)) {
-          setQuestions(quiz);
-          setShowQuiz(true);
+        if (quiz.type === 'free_text') {
+          setQuizType('free_text');
+          setFreeQuestions(quiz.questions || [{ question: '' }]);
+        } else {
+          setQuizType('options');
+          setQuestions(quiz.questions || [{ question: '', options: ['', '', '', ''] }]);
         }
+        setShowQuiz(true);
       } catch {}
     }
     if (lesson?.homework_data) {
@@ -323,56 +274,35 @@ function LessonForm({ lesson, onSave, onCancel }: any) {
     if (!file) return;
     setUploading(true);
     try {
-      const reader = new FileReader();
-      reader.onload = async () => {
-        const base64 = (reader.result as string).split(',')[1];
-        const response = await fetch('/api/admin/upload', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ fileName: file.name, fileData: base64 }),
-        });
-        const data = await response.json();
-        if (response.ok) {
-          setFormData({ ...formData, content: data.url });
-        } else {
-          alert(data.error || 'Ошибка загрузки');
-        }
-        setUploading(false);
-      };
-      reader.readAsDataURL(file);
-    } catch {
-      alert('Ошибка загрузки');
-      setUploading(false);
-    }
+      const formDataUpload = new FormData();
+      formDataUpload.append('file', file);
+      const response = await fetch('/api/admin/upload', { method: 'POST', body: formDataUpload });
+      const data = await response.json();
+      if (response.ok) setFormData({ ...formData, content: data.url });
+      else alert(data.error || 'Ошибка');
+    } catch { alert('Ошибка загрузки'); } finally { setUploading(false); }
   };
 
   const addQuestion = () => {
-    setQuestions([...questions, { question: '', options: ['', '', '', ''] }]);
+    if (quizType === 'options') setQuestions([...questions, { question: '', options: ['', '', '', ''] }]);
+    else setFreeQuestions([...freeQuestions, { question: '' }]);
   };
 
   const removeQuestion = (index: number) => {
-    setQuestions(questions.filter((_, i) => i !== index));
-  };
-
-  const updateQuestion = (index: number, field: string, value: any) => {
-    const newQuestions = [...questions];
-    (newQuestions[index] as any)[field] = value;
-    setQuestions(newQuestions);
-  };
-
-  const updateOption = (qIndex: number, oIndex: number, value: string) => {
-    const newQuestions = [...questions];
-    newQuestions[qIndex].options[oIndex] = value;
-    setQuestions(newQuestions);
+    if (quizType === 'options') setQuestions(questions.filter((_, i) => i !== index));
+    else setFreeQuestions(freeQuestions.filter((_, i) => i !== index));
   };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     let quiz_data = '';
     if (showQuiz) {
-      const validQuestions = questions.filter(q => q.question.trim() !== '');
-      if (validQuestions.length > 0) {
-        quiz_data = JSON.stringify(validQuestions);
+      if (quizType === 'options') {
+        const valid = questions.filter(q => q.question.trim());
+        if (valid.length > 0) quiz_data = JSON.stringify({ type: 'options', questions: valid });
+      } else {
+        const valid = freeQuestions.filter(q => q.question.trim());
+        if (valid.length > 0) quiz_data = JSON.stringify({ type: 'free_text', questions: valid });
       }
     }
     const homework_data = showHomework ? homeworkText : '';
@@ -389,7 +319,7 @@ function LessonForm({ lesson, onSave, onCancel }: any) {
             <input type="text" value={formData.title} onChange={(e) => setFormData({ ...formData, title: e.target.value })} className="w-full px-3 py-2 border-2 border-gray-400 rounded-lg text-gray-900 font-medium" required />
           </div>
           <div>
-            <label className="block text-sm font-bold text-gray-900 mb-1">Описание урока</label>
+            <label className="block text-sm font-bold text-gray-900 mb-1">Описание</label>
             <textarea value={formData.description} onChange={(e) => setFormData({ ...formData, description: e.target.value })} className="w-full px-3 py-2 border border-gray-400 rounded-lg text-gray-900" rows={2} />
           </div>
           <div>
@@ -399,6 +329,7 @@ function LessonForm({ lesson, onSave, onCancel }: any) {
               <option value="text">📄 Текст</option>
             </select>
           </div>
+
           {formData.type === 'video' ? (
             <div className="space-y-3">
               <div>
@@ -410,7 +341,7 @@ function LessonForm({ lesson, onSave, onCancel }: any) {
                 {uploading && <p className="text-blue-700 text-sm mt-1 font-semibold">Загрузка...</p>}
               </div>
               <div>
-                <label className="block text-sm font-bold text-gray-900 mb-2">Или URL видео</label>
+                <label className="block text-sm font-bold text-gray-900 mb-2">Или URL</label>
                 <input type="text" value={formData.content} onChange={(e) => setFormData({ ...formData, content: e.target.value })} placeholder="/videos/my-video.mp4" className="w-full px-3 py-2 border border-gray-400 rounded-lg text-gray-900" />
               </div>
               {formData.content && formData.content.startsWith('/videos/') && (
@@ -420,60 +351,56 @@ function LessonForm({ lesson, onSave, onCancel }: any) {
           ) : (
             <div>
               <label className="block text-sm font-bold text-gray-900 mb-1">Текст урока</label>
-              <textarea value={formData.content} onChange={(e) => setFormData({ ...formData, content: e.target.value })} className="w-full px-3 py-2 border border-gray-400 rounded-lg text-gray-900" rows={5} placeholder="Введите текст урока..." />
+              <textarea value={formData.content} onChange={(e) => setFormData({ ...formData, content: e.target.value })} className="w-full px-3 py-2 border border-gray-400 rounded-lg text-gray-900" rows={5} />
             </div>
           )}
 
-          {/* Тест с несколькими вопросами */}
+          {/* Опрос/Тест */}
           <div className="border-t-2 pt-4">
             <button type="button" onClick={() => setShowQuiz(!showQuiz)} className="flex items-center gap-2 text-blue-700 font-bold">
-              <span className="text-xl">{showQuiz ? '−' : '+'}</span> Добавить тест
+              <span className="text-xl">{showQuiz ? '−' : '+'}</span> Добавить опрос
             </button>
             {showQuiz && (
               <div className="mt-3 space-y-4">
-                {questions.map((q, qIndex) => (
-                  <div key={qIndex} className="bg-yellow-50 border-2 border-yellow-400 rounded-lg p-4">
-                    <div className="flex justify-between items-center mb-3">
-                      <span className="font-bold text-gray-900">Вопрос {qIndex + 1}</span>
-                      {questions.length > 1 && (
-                        <button type="button" onClick={() => removeQuestion(qIndex)} className="text-red-600 text-sm font-bold">✕ Удалить</button>
-                      )}
+                <div>
+                  <label className="block text-sm font-bold text-gray-900 mb-2">Тип опроса</label>
+                  <select value={quizType} onChange={(e) => setQuizType(e.target.value as any)} className="w-full px-3 py-2 border-2 border-gray-400 rounded-lg text-gray-900 font-semibold bg-white">
+                    <option value="options">С вариантами ответов</option>
+                    <option value="free_text">Свободный ответ (текст)</option>
+                  </select>
+                </div>
+
+                {quizType === 'options' ? (
+                  questions.map((q, qIndex) => (
+                    <div key={qIndex} className="bg-yellow-50 border-2 border-yellow-400 rounded-lg p-4">
+                      <div className="flex justify-between items-center mb-3">
+                        <span className="font-bold text-gray-900">Вопрос {qIndex + 1}</span>
+                        {questions.length > 1 && <button type="button" onClick={() => removeQuestion(qIndex)} className="text-red-600 text-sm font-bold">✕</button>}
+                      </div>
+                      <input type="text" value={q.question} onChange={(e) => { const newQ = [...questions]; newQ[qIndex].question = e.target.value; setQuestions(newQ); }} className="w-full px-3 py-2 border-2 border-gray-400 rounded-lg text-gray-900 font-medium mb-3" placeholder="Вопрос..." />
+                      <div className="space-y-2">
+                        {q.options.map((opt: string, oIndex: number) => (
+                          <div key={oIndex} className="flex items-center gap-2">
+                            <span className="text-gray-700 font-bold w-6">{oIndex + 1}.</span>
+                            <input type="text" value={opt} onChange={(e) => { const newQ = [...questions]; newQ[qIndex].options[oIndex] = e.target.value; setQuestions(newQ); }} className="flex-1 px-3 py-2 border-2 border-gray-400 rounded-lg text-gray-900 font-medium" placeholder={`Вариант ${oIndex + 1}`} />
+                          </div>
+                        ))}
+                      </div>
                     </div>
-                    <input
-                      type="text"
-                      value={q.question}
-                      onChange={(e) => updateQuestion(qIndex, 'question', e.target.value)}
-                      className="w-full px-3 py-2 border-2 border-gray-400 rounded-lg text-gray-900 font-medium mb-3"
-                      placeholder="Введите вопрос..."
-                    />
-                    <div className="space-y-2">
-                      {q.options.map((opt, oIndex) => (
-                        <div key={oIndex} className="flex items-center gap-2">
-                          <input
-                            type="radio"
-                            
-                            
-                            
-                            className="flex-shrink-0"
-                            title="Правильный ответ"
-                          />
-                          <span className="text-gray-700 font-bold w-6">{oIndex + 1}.</span>
-                          <input
-                            type="text"
-                            value={opt}
-                            onChange={(e) => updateOption(qIndex, oIndex, e.target.value)}
-                            className="flex-1 px-3 py-2 border-2 border-gray-400 rounded-lg text-gray-900 font-medium"
-                            placeholder={`Вариант ${oIndex + 1}`}
-                          />
-                        </div>
-                      ))}
+                  ))
+                ) : (
+                  freeQuestions.map((q, qIndex) => (
+                    <div key={qIndex} className="bg-green-50 border-2 border-green-400 rounded-lg p-4">
+                      <div className="flex justify-between items-center mb-3">
+                        <span className="font-bold text-gray-900">Вопрос {qIndex + 1}</span>
+                        {freeQuestions.length > 1 && <button type="button" onClick={() => removeQuestion(qIndex)} className="text-red-600 text-sm font-bold">✕</button>}
+                      </div>
+                      <input type="text" value={q.question} onChange={(e) => { const newQ = [...freeQuestions]; newQ[qIndex].question = e.target.value; setQuestions(newQ); }} className="w-full px-3 py-2 border-2 border-gray-400 rounded-lg text-gray-900 font-medium" placeholder="Вопрос, на который ученик ответит текстом..." />
                     </div>
-                    
-                  </div>
-                ))}
-                <button type="button" onClick={addQuestion} className="bg-blue-100 hover:bg-blue-200 text-blue-800 font-bold py-2 px-4 rounded-lg text-sm">
-                  + Добавить вопрос
-                </button>
+                  ))
+                )}
+
+                <button type="button" onClick={addQuestion} className="bg-blue-100 hover:bg-blue-200 text-blue-800 font-bold py-2 px-4 rounded-lg text-sm">+ Добавить вопрос</button>
               </div>
             )}
           </div>
@@ -485,7 +412,6 @@ function LessonForm({ lesson, onSave, onCancel }: any) {
             </button>
             {showHomework && (
               <div className="mt-3 bg-blue-50 border-2 border-blue-400 rounded-lg p-4">
-                <label className="block text-sm font-bold text-gray-900 mb-2">Домашнее задание</label>
                 <textarea value={homeworkText} onChange={(e) => setHomeworkText(e.target.value)} className="w-full px-3 py-2 border-2 border-gray-400 rounded-lg text-gray-900" rows={4} placeholder="Опишите задание..." />
               </div>
             )}
