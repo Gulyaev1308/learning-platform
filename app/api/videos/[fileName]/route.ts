@@ -1,29 +1,19 @@
 import { NextRequest, NextResponse } from 'next/server';
-import db from '@/lib/db';
+import { readFile, stat } from 'fs/promises';
+import path from 'path';
+import fs from 'fs';
 
 export async function GET(request: NextRequest, { params }: { params: Promise<{ fileName: string }> }) {
   try {
     const { fileName } = await params;
-    
-    console.log('Requested video:', fileName);
+    const filePath = path.join('/tmp/videos', fileName);
 
-    // Проверяем, число ли это (ID) или строка (filename)
-    let result;
-    if (/^\d+$/.test(fileName)) {
-      result = await db.query('SELECT * FROM videos WHERE id = $1', [parseInt(fileName)]);
-    } else {
-      result = await db.query('SELECT * FROM videos WHERE filename = $1 OR id::text = $1', [fileName]);
+    if (!fs.existsSync(filePath)) {
+      return NextResponse.json({ error: 'Видео не найдено', path: filePath }, { status: 404 });
     }
 
-    const video = result.rows[0];
-
-    if (!video) {
-      console.log('Video not found:', fileName);
-      return NextResponse.json({ error: 'Видео не найдено' }, { status: 404 });
-    }
-
-    const buffer = video.data as Buffer;
-    const totalLength = buffer.length;
+    const fileStat = await stat(filePath);
+    const buffer = await readFile(filePath);
     const uint8Array = new Uint8Array(buffer);
 
     const rangeHeader = request.headers.get('range');
@@ -31,25 +21,24 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     if (rangeHeader) {
       const parts = rangeHeader.replace(/bytes=/, '').split('-');
       const start = parseInt(parts[0]);
-      const end = parts[1] ? parseInt(parts[1]) : totalLength - 1;
-      const chunkSize = end - start + 1;
+      const end = parts[1] ? parseInt(parts[1]) : buffer.length - 1;
       const chunk = uint8Array.slice(start, end + 1);
 
       return new NextResponse(chunk, {
         status: 206,
         headers: {
-          'Content-Type': video.content_type || 'video/mp4',
-          'Content-Range': `bytes ${start}-${end}/${totalLength}`,
+          'Content-Type': 'video/mp4',
+          'Content-Range': `bytes ${start}-${end}/${buffer.length}`,
           'Accept-Ranges': 'bytes',
-          'Content-Length': chunkSize.toString(),
+          'Content-Length': (end - start + 1).toString(),
         },
       });
     }
 
     return new NextResponse(uint8Array, {
       headers: {
-        'Content-Type': video.content_type || 'video/mp4',
-        'Content-Length': totalLength.toString(),
+        'Content-Type': 'video/mp4',
+        'Content-Length': buffer.length.toString(),
         'Accept-Ranges': 'bytes',
       },
     });

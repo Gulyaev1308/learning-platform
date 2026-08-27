@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
-import db from '@/lib/db';
+import { writeFile, mkdir } from 'fs/promises';
+import path from 'path';
+import fs from 'fs';
 import { getSession } from '@/lib/auth';
 
 export async function POST(request: NextRequest) {
@@ -14,22 +16,19 @@ export async function POST(request: NextRequest) {
 
     if (!file) return NextResponse.json({ error: 'Файл не найден' }, { status: 400 });
 
-    const buffer = Buffer.from(await file.arrayBuffer());
+    const ext = path.extname(file.name) || '.mp4';
+    const fileName = `video_${Date.now()}${ext}`;
+    const tmpDir = '/tmp/videos';
     
-    // Сохраняем в PostgreSQL
-    const result = await db.query(
-      'INSERT INTO videos (filename, data, content_type) VALUES ($1, $2, $3) RETURNING id',
-      [file.name, buffer, file.type || 'video/mp4']
-    );
+    if (!fs.existsSync(tmpDir)) await mkdir(tmpDir, { recursive: true });
 
-    const videoId = result.rows[0].id;
+    const buffer = Buffer.from(await file.arrayBuffer());
+    await writeFile(path.join(tmpDir, fileName), buffer);
 
-    return NextResponse.json({ 
-      success: true, 
-      url: `/api/videos/${videoId}`,
-    });
+    console.log('Saved:', fileName, buffer.length);
+
+    return NextResponse.json({ success: true, url: `/api/videos/${fileName}` });
   } catch (error) {
-    console.error('Upload error:', error);
     return NextResponse.json({ error: 'Ошибка: ' + (error as Error).message }, { status: 500 });
   }
 }
