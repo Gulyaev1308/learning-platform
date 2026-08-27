@@ -47,7 +47,6 @@ database/*.db-wal
 database/*.db-shm
 
 # Videos (если не хотите загружать в git)
-public/videos/*
 
 # Env
 .env.local
