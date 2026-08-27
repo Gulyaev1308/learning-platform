@@ -2,22 +2,17 @@ import Database from 'better-sqlite3';
 import path from 'path';
 import fs from 'fs';
 
-// Путь к базе данных
-const dbPath = path.join(process.cwd(), 'database', 'learning.db');
+const dbPath = process.env.DATABASE_PATH || path.join(process.cwd(), 'database', 'learning.db');
 
-// Создаем директорию, если её нет
 if (!fs.existsSync(path.dirname(dbPath))) {
   fs.mkdirSync(path.dirname(dbPath), { recursive: true });
 }
 
-// Создаем подключение к БД
 const db = new Database(dbPath);
-
-// Включаем WAL режим для лучшей производительности
 db.pragma('journal_mode = WAL');
 db.pragma('foreign_keys = ON');
 
-// Инициализация таблиц, если их нет
+// Создаем таблицы если их нет
 db.exec(`
   CREATE TABLE IF NOT EXISTS users (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -26,18 +21,35 @@ db.exec(`
     name TEXT NOT NULL,
     role TEXT NOT NULL DEFAULT 'student',
     leader_id INTEGER,
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (leader_id) REFERENCES users(id)
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  );
+
+  CREATE TABLE IF NOT EXISTS blocks (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    leader_id INTEGER,
+    title TEXT NOT NULL,
+    order_index INTEGER NOT NULL DEFAULT 1
+  );
+
+  CREATE TABLE IF NOT EXISTS modules (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    block_id INTEGER NOT NULL,
+    title TEXT NOT NULL,
+    order_index INTEGER NOT NULL DEFAULT 1
   );
 
   CREATE TABLE IF NOT EXISTS lessons (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     title TEXT NOT NULL,
-    type TEXT NOT NULL CHECK(type IN ('video', 'text', 'quiz', 'practice')),
-    content TEXT,
-    block INTEGER NOT NULL CHECK(block IN (1, 2)),
-    module INTEGER CHECK(module IN (1, 2)),
-    order_index INTEGER NOT NULL
+    type TEXT NOT NULL,
+    content TEXT DEFAULT '',
+    description TEXT DEFAULT '',
+    quiz_data TEXT DEFAULT '',
+    homework_data TEXT DEFAULT '',
+    block_id INTEGER,
+    module_id INTEGER,
+    order_index INTEGER NOT NULL DEFAULT 1,
+    leader_id INTEGER
   );
 
   CREATE TABLE IF NOT EXISTS progress (
@@ -46,8 +58,6 @@ db.exec(`
     lesson_id INTEGER NOT NULL,
     status TEXT NOT NULL DEFAULT 'completed',
     completed_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (user_id) REFERENCES users(id),
-    FOREIGN KEY (lesson_id) REFERENCES lessons(id),
     UNIQUE(user_id, lesson_id)
   );
 
@@ -56,15 +66,9 @@ db.exec(`
     user_id INTEGER NOT NULL,
     lesson_id INTEGER NOT NULL,
     answer TEXT NOT NULL,
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (user_id) REFERENCES users(id),
-    FOREIGN KEY (lesson_id) REFERENCES lessons(id)
+    free_answer TEXT DEFAULT '',
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
   );
-
-  CREATE INDEX IF NOT EXISTS idx_progress_user ON progress(user_id);
-  CREATE INDEX IF NOT EXISTS idx_progress_lesson ON progress(lesson_id);
-  CREATE INDEX IF NOT EXISTS idx_quiz_user ON quiz_answers(user_id);
-  CREATE INDEX IF NOT EXISTS idx_users_leader ON users(leader_id);
 `);
 
 export default db;
