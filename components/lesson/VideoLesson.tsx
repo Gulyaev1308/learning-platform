@@ -4,27 +4,18 @@ interface VideoLessonProps {
 }
 
 export default function VideoLesson({ content, title }: VideoLessonProps) {
-  console.log('Video URL:', content);
-  
   return (
     <div className="space-y-4">
-      <div className="bg-black rounded-lg overflow-hidden">
-        <video
-          controls
-          className="w-full aspect-video"
-          src={content}
-          preload="metadata"
-        >
-          <source src={content} />
+      <div className="bg-black rounded-lg overflow-hidden aspect-video">
+        <video controls className="w-full h-full" src={content} preload="metadata">
           Ваш браузер не поддерживает видео.
         </video>
       </div>
       <p className="text-sm text-gray-700">
-        Если видео не загружается, нажмите{" "}
+        Если видео не загружается,{" "}
         <a href={content} target="_blank" className="text-blue-600 underline">
-          сюда
-        </a>{" "}
-        чтобы открыть в новой вкладке
+          откройте в новой вкладке
+        </a>
       </p>
     </div>
   );
