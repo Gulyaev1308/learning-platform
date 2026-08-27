@@ -5,111 +5,56 @@ import { getSession } from '@/lib/auth';
 export async function GET(request: NextRequest) {
   try {
     const session = await getSession();
-    
-    if (!session) {
-      return NextResponse.json({ error: 'Не авторизован' }, { status: 401 });
-    }
+    if (!session) return NextResponse.json({ error: 'Не авторизован' }, { status: 401 });
 
     const user = db.prepare('SELECT * FROM users WHERE id = ?').get(session.userId) as any;
-    
-    if (!user) {
-      return NextResponse.json({ error: 'Пользователь не найден' }, { status: 404 });
-    }
+    const leaderId = user?.role === 'student' ? user.leader_id : user?.id;
 
-    const leaderId = user.role === 'student' ? user.leader_id : user.id;
+    console.log('User:', user?.id, user?.role, 'leaderId:', leaderId);
 
-    // Получаем всё одной структурой
-    const blocks = db.prepare(`
-      SELECT * FROM blocks 
-      WHERE leader_id = ? OR leader_id IS NULL
-      ORDER BY order_index
-    `).all(leaderId) as any[];
+    // Получаем блоки
+    const blocks = db.prepare(
+      'SELECT * FROM blocks WHERE leader_id = ? OR leader_id IS NULL ORDER BY order_index, id'
+    ).all(leaderId) as any[];
 
-    // Получаем все завершенные уроки пользователя
-    const completedProgress = db.prepare(
-      'SELECT lesson_id FROM progress WHERE user_id = ? AND status = ?'
-    ).all(session.userId, 'completed') as any[];
-    
-    const completedLessonIds = new Set(completedProgress.map(p => p.lesson_id));
+    console.log('Blocks found:', blocks.length);
 
-    // Собираем все уроки по порядку
-    let allLessonsInOrder: any[] = [];
-    
+    const result = [];
+    let totalLessons = 0;
+    let completedLessons = 0;
+
     for (const block of blocks) {
       const modules = db.prepare(
-        'SELECT * FROM modules WHERE block_id = ? ORDER BY order_index'
+        'SELECT * FROM modules WHERE block_id = ? ORDER BY order_index, id'
       ).all(block.id) as any[];
-      
+
+      console.log(`Block "${block.title}" has ${modules.length} modules`);
+
+      const modulesWithLessons = [];
+
       for (const mod of modules) {
         const lessons = db.prepare(
-          'SELECT * FROM lessons WHERE module_id = ? ORDER BY order_index'
+          'SELECT * FROM lessons WHERE module_id = ? ORDER BY order_index, id'
         ).all(mod.id) as any[];
-        
-        lessons.forEach(lesson => {
-          allLessonsInOrder.push({
-            ...lesson,
-            block_id: block.id,
-            block_title: block.title,
-            module_id: mod.id,
-            module_title: mod.title,
-          });
+
+        console.log(`Module "${mod.title}" has ${lessons.length} lessons`);
+
+        const lessonsWithStatus = lessons.map((lesson: any) => {
+          totalLessons++;
+          const progress = db.prepare(
+            'SELECT * FROM progress WHERE user_id = ? AND lesson_id = ? AND status = ?'
+          ).get(session.userId, lesson.id, 'completed');
+          if (progress) completedLessons++;
+          return { ...lesson, status: progress ? 'completed' : 'available' };
         });
+
+        modulesWithLessons.push({ ...mod, lessons: lessonsWithStatus });
       }
+
+      result.push({ ...block, modules: modulesWithLessons });
     }
 
-    // Определяем статус каждого урока
-    let previousCompleted = true; // Первый урок всегда доступен
-    const lessonsWithStatus = allLessonsInOrder.map((lesson, index) => {
-      const isCompleted = completedLessonIds.has(lesson.id);
-      
-      let status: 'completed' | 'available' | 'locked';
-      if (isCompleted) {
-        status = 'completed';
-      } else if (index === 0 || previousCompleted) {
-        status = 'available';
-      } else {
-        status = 'locked';
-      }
-      
-      // Обновляем previousCompleted для следующего урока
-      previousCompleted = isCompleted;
-      
-      return {
-        ...lesson,
-        status,
-      };
-    });
-
-    // Группируем обратно в структуру
-    const result: any[] = [];
-    let totalLessons = allLessonsInOrder.length;
-    let completedLessons = completedLessonIds.size;
-
-    for (const block of blocks) {
-      const modules = db.prepare(
-        'SELECT * FROM modules WHERE block_id = ? ORDER BY order_index'
-      ).all(block.id) as any[];
-      
-      const modulesWithLessons = modules.map(mod => {
-        const modLessons = lessonsWithStatus.filter(l => l.module_id === mod.id);
-        return {
-          ...mod,
-          lessons: modLessons,
-        };
-      });
-      
-      result.push({
-        ...block,
-        modules: modulesWithLessons,
-      });
-    }
-
-    const progressPercent = totalLessons > 0 
-      ? Math.round((completedLessons / totalLessons) * 100) 
-      : 0;
-
-    // Текущий урок — первый доступный
-    const currentLesson = lessonsWithStatus.find(l => l.status === 'available') || null;
+    const progressPercent = totalLessons > 0 ? Math.round((completedLessons / totalLessons) * 100) : 0;
 
     return NextResponse.json({
       success: true,
@@ -117,10 +62,10 @@ export async function GET(request: NextRequest) {
       totalLessons,
       completedLessons,
       progressPercent,
-      currentLesson,
+      currentLesson: null,
     });
   } catch (error) {
-    console.error('Error fetching lessons:', error);
-    return NextResponse.json({ error: 'Ошибка при получении уроков' }, { status: 500 });
+    console.error('Error in lessons API:', error);
+    return NextResponse.json({ error: 'Ошибка: ' + (error as Error).message }, { status: 500 });
   }
 }
