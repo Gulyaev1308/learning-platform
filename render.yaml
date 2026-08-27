@@ -1,0 +1,15 @@
+services:
+  - type: web
+    name: learning-platform
+    env: node
+    buildCommand: npm install && npm run build
+    startCommand: npm start
+    envVars:
+      - key: DATABASE_URL
+        sync: false
+  - type: cron
+    name: keep-alive
+    env: node
+    schedule: "*/5 * * * *"
+    buildCommand: echo "ping"
+    startCommand: curl -s https://learning-platform-1-yjn0.onrender.com > /dev/null
