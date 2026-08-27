@@ -2,52 +2,24 @@ import { NextRequest, NextResponse } from 'next/server';
 import db from '@/lib/db';
 import { getSession } from '@/lib/auth';
 
-export async function PUT(
-  request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-) {
-  try {
-    const session = await getSession();
-    if (!session || session.role !== 'admin') {
-      return NextResponse.json({ error: 'Доступ запрещен' }, { status: 403 });
-    }
-
-    const { id } = await params;
-    const lessonId = parseInt(id);
-    const body = await request.json();
-    const { title, type, content, description, module_id, block_id, order_index, leader_id } = body;
-
-    db.prepare(
-      'UPDATE lessons SET title = ?, type = ?, content = ?, description = ?, module_id = ?, block_id = ?, order_index = ?, leader_id = ? WHERE id = ?'
-    ).run(title, type, content || '', description || '', module_id || null, block_id || null, order_index || 1, leader_id || null, lessonId);
-
-    return NextResponse.json({ success: true });
-  } catch (error) {
-    console.error('Error updating lesson:', error);
-    return NextResponse.json({ error: 'Ошибка при обновлении: ' + (error as Error).message }, { status: 500 });
-  }
+export async function PUT(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const session = await getSession();
+  if (!session || session.role !== 'admin') return NextResponse.json({ error: 'Доступ запрещен' }, { status: 403 });
+  const { id } = await params;
+  const { title, type, content, description, quiz_data, homework_data, block_id, module_id, order_index } = await request.json();
+  await db.query(
+    'UPDATE lessons SET title = $1, type = $2, content = $3, description = $4, quiz_data = $5, homework_data = $6, block_id = $7, module_id = $8, order_index = $9 WHERE id = $10',
+    [title, type, content, description, quiz_data, homework_data, block_id, module_id, order_index, id]
+  );
+  return NextResponse.json({ success: true });
 }
 
-export async function DELETE(
-  request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-) {
-  try {
-    const session = await getSession();
-    if (!session || session.role !== 'admin') {
-      return NextResponse.json({ error: 'Доступ запрещен' }, { status: 403 });
-    }
-
-    const { id } = await params;
-    const lessonId = parseInt(id);
-
-    await db.query('DELETE FROM progress WHERE lesson_id = $1', [lessonId]);
-    await db.query('DELETE FROM quiz_answers WHERE lesson_id = $1', [lessonId]);
-    await db.query('DELETE FROM lessons WHERE id = $1', [lessonId]);
-
-    return NextResponse.json({ success: true });
-  } catch (error) {
-    console.error('Error deleting lesson:', error);
-    return NextResponse.json({ error: 'Ошибка при удалении' }, { status: 500 });
-  }
+export async function DELETE(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const session = await getSession();
+  if (!session || session.role !== 'admin') return NextResponse.json({ error: 'Доступ запрещен' }, { status: 403 });
+  const { id } = await params;
+  await db.query('DELETE FROM progress WHERE lesson_id = $1', [id]);
+  await db.query('DELETE FROM quiz_answers WHERE lesson_id = $1', [id]);
+  await db.query('DELETE FROM lessons WHERE id = $1', [id]);
+  return NextResponse.json({ success: true });
 }

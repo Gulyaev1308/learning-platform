@@ -2,49 +2,22 @@ import { NextRequest, NextResponse } from 'next/server';
 import bcrypt from 'bcrypt';
 import db from '@/lib/db';
 import { createSession } from '@/lib/auth';
-import { isValidEmail } from '@/lib/utils';
 
 export async function POST(request: NextRequest) {
   try {
-    const body = await request.json();
-    const { name, email, password } = body;
-
-    if (!name || !email || !password) {
-      return NextResponse.json({ error: 'Все поля обязательны' }, { status: 400 });
-    }
-
-    if (!isValidEmail(email)) {
-      return NextResponse.json({ error: 'Некорректный email' }, { status: 400 });
-    }
-
-    if (password.length < 6) {
-      return NextResponse.json({ error: 'Пароль должен быть минимум 6 символов' }, { status: 400 });
-    }
-
-    const existingUser = (await db.query('SELECT id FROM users WHERE email = $1', [email])).rows[0];
-    if (existingUser) {
-      return NextResponse.json({ error: 'Пользователь с таким email уже существует' }, { status: 400 });
-    }
-
-    const passwordHash = await bcrypt.hash(password, 10);
-
-    const result = db.prepare(
-      'INSERT INTO users (email, password_hash, name, role) VALUES (?, ?, ?, ?)'
-    ).run(email, passwordHash, name, 'leader');
-
-    await createSession({
-      userId: Number(result.rows[0].id),
-      email,
-      name,
-      role: 'leader',
-    });
-
-    return NextResponse.json({
-      success: true,
-      redirect: '/leader',
-    });
-  } catch (error) {
-    console.error('Register leader error:', error);
-    return NextResponse.json({ error: 'Ошибка при регистрации' }, { status: 500 });
+    const { name, email, password } = await request.json();
+    const exists = await db.query('SELECT id FROM users WHERE email = $1', [email]);
+    if (exists.rows.length > 0) return NextResponse.json({ error: 'Email уже существует' }, { status: 400 });
+    
+    const hash = await bcrypt.hash(password, 10);
+    const result = await db.query(
+      'INSERT INTO users (email, password_hash, name, role) VALUES ($1, $2, $3, $4) RETURNING id',
+      [email, hash, name, 'leader']
+    );
+    
+    await createSession({ userId: result.rows[0].id, email, name, role: 'leader' });
+    return NextResponse.json({ success: true, redirect: '/leader' });
+  } catch (e) {
+    return NextResponse.json({ error: 'Ошибка' }, { status: 500 });
   }
 }
