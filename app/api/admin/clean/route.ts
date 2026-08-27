@@ -10,13 +10,19 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Доступ запрещен' }, { status: 403 });
     }
 
-    // Очищаем все таблицы, кроме админа
+    // Отключаем проверку внешних ключей
+    db.exec('PRAGMA foreign_keys = OFF');
+
+    // Очищаем в правильном порядке
     db.exec('DELETE FROM quiz_answers');
     db.exec('DELETE FROM progress');
     db.exec('DELETE FROM lessons');
     db.exec('DELETE FROM modules');
     db.exec('DELETE FROM blocks');
     db.exec("DELETE FROM users WHERE role != 'admin'");
+
+    // Включаем проверку обратно
+    db.exec('PRAGMA foreign_keys = ON');
 
     return NextResponse.json({ 
       success: true, 
