@@ -7,7 +7,7 @@ export function proxy(request: NextRequest) {
   const path = request.nextUrl.pathname;
 
   // Публичные маршруты
-  const publicRoutes = ['/login', '/register', '/'];
+  const publicRoutes = ['/login', '/register', '/register-leader', '/'];
   const isPublicRoute = publicRoutes.some(route => path.startsWith(route));
   
   // API маршруты
