@@ -1,125 +1,84 @@
-interface QuizAnswer {
-  lesson_id: number;
-  lesson_title: string;
-  question: string;
-  options: string[];
-  student_answer: string | null;
-  answered: boolean;
-  answered_at: string | null;
-}
+import React, { useState } from 'react';
 
 interface QuizAnswersProps {
-  student: {
-    id: number;
-    name: string;
-    email: string;
-  };
-  stats: {
-    total_quizzes: number;
-    answered_quizzes: number;
-    completion_percent: number;
-  };
-  answers: QuizAnswer[];
+  student: { id: number; name: string; email: string };
+  stats: any;
+  answers: any[];
   onClose: () => void;
 }
 
 export default function QuizAnswers({ student, stats, answers, onClose }: QuizAnswersProps) {
+  const [verifying, setVerifying] = useState(false);
+
+  // Функция для ручного открытия платного Блока 2 лидеру
+  const handleVerifyPayment = async (blockId: number, action: 'approved' | 'rejected') => {
+    setVerifying(true);
+    try {
+      const res = await fetch('/api/leader/payments', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ student_id: student.id, block_id: blockId, action })
+      });
+      if (res.ok) {
+        alert(action === 'approved' ? 'Доступ к Блоку открыт!' : 'Заявка отклонена');
+        onClose();
+        window.location.reload();
+      }
+    } catch (err) {
+      alert('Ошибка выполнения операции');
+    } finally {
+      setVerifying(false);
+    }
+  };
+
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-2 sm:p-4">
-      <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
-        <div className="p-4 sm:p-6">
-          <div className="flex justify-between items-start mb-4">
-            <div>
-              <h3 className="text-lg sm:text-xl font-bold text-gray-900">
-                Ответы на опросы
-              </h3>
-              <p className="text-sm text-gray-900 mt-1">
-                {student.name} • {student.email}
-              </p>
-            </div>
-            <button
-              onClick={onClose}
-              className="text-gray-700 hover:text-gray-700 text-xl flex-shrink-0 ml-4"
-            >
-              ✕
+    <div className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-50 backdrop-blur-xs">
+      <div className="bg-white text-gray-900 rounded-2xl p-6 max-w-2xl w-full shadow-2xl max-h-[85vh] overflow-y-auto space-y-6">
+        <div className="flex justify-between items-center border-b border-gray-100 pb-3">
+          <div>
+            <h3 className="text-xl font-bold">{student.name}</h3>
+            <p className="text-xs text-gray-500">{student.email}</p>
+          </div>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-lg">✕</button>
+        </div>
+
+        {/* УПРАВЛЕНИЕ ДОСТУПОМ К ПЛАТНОМУ БЛОКУ 2 */}
+        <div className="p-4 bg-amber-50 border border-amber-200 rounded-xl space-y-3">
+          <h4 className="text-sm font-bold text-amber-900 flex items-center gap-2">🔑 Контроль платного доступа (Блок 2)</h4>
+          <p className="text-xs text-amber-700">Если новичок перевел вам оплату на карту, подтвердите его участие для открытия «лестницы» обучения:</p>
+          <div className="flex gap-2">
+            <button disabled={verifying} onClick={() => handleVerifyPayment(2, 'approved')} className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg text-xs font-bold transition">
+              Открыть Блок 2 (Оплата получена)
+            </button>
+            <button disabled={verifying} onClick={() => handleVerifyPayment(2, 'rejected')} className="px-4 py-2 bg-red-100 hover:bg-red-200 text-red-700 rounded-lg text-xs font-bold transition">
+              Закрыть доступ
             </button>
           </div>
+        </div>
 
-          {/* Статистика */}
-          <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 sm:p-4 mb-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-semibold text-gray-800">
-                  Прогресс по опросам
-                </p>
-                <p className="text-xs text-gray-900 mt-1">
-                  Отвечено: {stats.answered_quizzes} из {stats.total_quizzes}
-                </p>
-              </div>
-              <div className="text-2xl font-bold text-blue-600">
-                {stats.completion_percent}%
-              </div>
-            </div>
-            <div className="w-full bg-white rounded-full h-2 mt-2">
-              <div
-                className="bg-blue-500 h-2 rounded-full transition-all"
-                style={{ width: `${stats.completion_percent}%` }}
-              />
-            </div>
-          </div>
-
+        {/* ВЫВОД РЕЗУЛЬТАТОВ ОПРОСОВ (ИСПРАВЛЕНО: Распаковываем массив ответов JSONB) */}
+        <div className="space-y-4">
+          <h4 className="font-bold text-sm text-gray-700 border-b border-gray-100 pb-2">📊 Результаты заполненных анкет:</h4>
           {answers.length === 0 ? (
-            <p className="text-gray-900 text-center py-8">Нет опросов</p>
+            <p className="text-sm text-gray-500 text-center py-4">Студент еще не отправлял ответы на тесты.</p>
           ) : (
-            <div className="space-y-3 sm:space-y-4">
-              {answers.map((answer, index) => (
-                <div
-                  key={answer.lesson_id}
-                  className={`border rounded-lg p-3 sm:p-4 ${
-                    answer.answered
-                      ? 'border-green-200 bg-green-50'
-                      : 'border-gray-200 bg-gray-50'
-                  }`}
-                >
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="text-xs font-medium text-gray-700">
-                      Опрос {index + 1} • {answer.lesson_title}
-                    </span>
-                    {answer.answered ? (
-                      <span className="text-xs text-green-600 font-medium">
-                        ✓ Отвечен
-                      </span>
-                    ) : (
-                      <span className="text-xs text-gray-600">
-                        Не отвечен
-                      </span>
-                    )}
+            answers.map((row: any, idx: number) => {
+              // Деструктуризируем или парсим answers из JSONB
+              const itemAnswers = typeof row.answers === 'string' ? JSON.parse(row.answers) : (row.answers?.answers || row.answers || []);
+              return (
+                <div key={idx} className="p-4 bg-gray-50 border border-gray-200 rounded-xl space-y-2">
+                  <span className="text-xs font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded-full">{row.lesson_title || 'Урок'}</span>
+                  <div className="space-y-2 pt-1">
+                    {Array.isArray(itemAnswers) ? itemAnswers.map((ans: any, i: number) => (
+                      <div key={i} className="text-xs">
+                        <p className="text-gray-500 font-medium">Вопрос: {ans.question}</p>
+                        <p className="text-gray-900 font-bold bg-white p-2 rounded border border-gray-100 mt-0.5">Ответ: {ans.answer}</p>
+                      </div>
+                    )) : <p className="text-xs text-gray-800">{JSON.stringify(itemAnswers)}</p>}
                   </div>
-
-                  <div className="font-semibold text-gray-800 mb-2 text-sm sm:text-base">
-                    {answer.question}
-                  </div>
-
-                  {answer.answered ? (
-                    <div className="text-sm sm:text-base">
-                      <span className="font-medium text-gray-700">Ответ ученика: </span>
-                      <span className="text-blue-600 font-semibold">
-                        {answer.student_answer}
-                      </span>
-                      {answer.answered_at && (
-                        <div className="text-xs text-gray-700 mt-1">
-                          {new Date(answer.answered_at).toLocaleString('ru-RU')}
-                        </div>
-                      )}
-                    </div>
-                  ) : (
-                    <p className="text-sm text-gray-600">
-                      Ученик ещё не ответил на этот опрос
-                    </p>
-                  )}
                 </div>
-              ))}
-            </div>
+              );
+            })
           )}
         </div>
       </div>
