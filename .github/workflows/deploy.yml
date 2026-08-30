@@ -18,19 +18,19 @@ jobs:
         username: admin
         key: ${{ secrets.SSH_PRIVATE_KEY }}
         script: |
-          # Создаем рабочую директорию проекта, если её нет
+          # 1. Заходим в папку проекта или создаем её, если её нет
           mkdir -p ~/learning-platform
           cd ~/learning-platform
           
-          # Полностью очищаем папку от старых сломанных попыток деплоя
-          rm -rf .git
+          # 2. Полностью и принудительно очищаем всё содержимое папки перед клонированием
+          sudo rm -rf ./* ./.* 2>/dev/null || true
           
-          # Клонируем репозиторий. URL обернут в кавычки для защиты синтаксиса Linux
+          # 3. Клонируем чистую копию репозитория с GitHub
           git clone 'https://github.com' .
           
-          # Безопасно создаем файл .env прямо на сервере из секретов GitHub
+          # 4. Создаем файл конфигурации .env на сервере
           echo "DB_PASSWORD=${{ secrets.PRODUCTION_DB_PASSWORD }}" > .env
           echo "SESSION_SECRET=${{ secrets.PRODUCTION_SESSION_SECRET }}" >> .env
           
-          # Запускаем сборку и развертывание контейнеров (Next.js + Postgres)
+          # 5. Пересобираем и запускаем Docker-контейнеры приложения и Postgres
           sudo docker compose up -d --build
