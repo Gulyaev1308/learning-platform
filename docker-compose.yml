@@ -1,3 +1,5 @@
+version: '3.8'
+
 services:
   # 1. База данных PostgreSQL (полностью скрыта от интернета)
   postgres-db:
@@ -16,13 +18,17 @@ services:
     build: .
     container_name: learning-platform-app
     ports:
-      - "80:3000"
+      - "80:3000" # Внешний порт 80 сервера -> Внутренний порт 3000 контейнера
     environment:
       DATABASE_URL: "postgresql://learning_admin:MesaSuperPassword2026!@postgres-db:5432/learning_platform_db?schema=public"
       SESSION_SECRET: "super-secret-padlock-key-for-iron-session-32"
+      
+      # КРИТИЧЕСКИ ВАЖНО ДЛЯ STANDALONE РЕЖИМА NEXT.JS В DOCKER:
+      HOST: "0.0.0.0"  # Разрешает бэкенду принимать внешние POST/GET запросы
+      PORT: 3000       # Явно фиксирует рабочий порт внутри контейнера
     restart: always
     depends_on:
       - postgres-db
 
 volumes:
-  pg_data:
+  pg_data: # Постоянный диск для хранения данных базы
