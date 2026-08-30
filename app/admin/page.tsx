@@ -228,12 +228,12 @@ export default function AdminPage() {
               </button>
               <button 
                 onClick={() => {
-                  const titleEl = document.getElementById('block-title-input');
-                  const premiumEl = document.getElementById('block-premium-input');
+                  const titleEl = document.getElementById('block-title-input') as HTMLInputElement | null;
+                  const premiumEl = document.getElementById('block-premium-input') as HTMLInputElement | null;
                   handleSaveBlock({
                     id: editingBlock?.id,
-                    title: titleEl.value,
-                    is_premium: premiumEl.checked
+                    title: titleEl ? titleEl.value : '',
+                    is_premium: premiumEl ? premiumEl.checked : false
                   });
                 }} 
                 className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg text-sm transition"
