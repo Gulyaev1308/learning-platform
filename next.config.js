@@ -1,6 +1,6 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  output: 'standalone', // КРИТИЧЕСКИ ВАЖНО ДЛЯ DOCKER
+  output: 'standalone',
   experimental: {
     proxyClientMaxBodySize: '500mb',
   },

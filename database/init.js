@@ -1,6 +1,5 @@
 const { Pool } = require('pg');
 
-// Пул автоматически подхватит DATABASE_URL из окружения Docker на сервере
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
 });
@@ -8,7 +7,6 @@ const pool = new Pool({
 async function initDB() {
   console.log('=== Инициализация базы данных PostgreSQL ===');
   try {
-    // Создание таблиц с синтаксисом PostgreSQL
     await pool.query(`
       CREATE TABLE IF NOT EXISTS users (
         id SERIAL PRIMARY KEY,
@@ -52,7 +50,6 @@ async function initDB() {
         FOREIGN KEY (lesson_id) REFERENCES lessons(id) ON DELETE CASCADE
       );
 
-      -- Создание индексов для оптимизации запросов в Postgres
       CREATE INDEX IF NOT EXISTS idx_progress_user ON progress(user_id);
       CREATE INDEX IF NOT EXISTS idx_progress_lesson ON progress(lesson_id);
       CREATE INDEX IF NOT EXISTS idx_quiz_user ON quiz_answers(user_id);

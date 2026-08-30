@@ -1,32 +1,31 @@
-const Database = require('better-sqlite3');
-const path = require('path');
+const { Pool } = require('pg');
 
-const dbPath = path.join(process.cwd(), 'database', 'learning.db');
-const db = new Database(dbPath);
+const pool = new Pool({
+  connectionString: process.env.DATABASE_URL,
+});
 
-// Добавляем колонку leader_id в таблицу lessons (если нет)
-try {
-  db.exec("ALTER TABLE lessons ADD COLUMN leader_id INTEGER REFERENCES users(id)");
-  console.log('✅ Колонка leader_id добавлена в lessons');
-} catch (e) {
-  console.log('Колонка leader_id уже существует');
+async function updateSchema() {
+  console.log('=== Обновление схемы базы данных PostgreSQL ===');
+  try {
+    // В PostgreSQL конструкция "ADD COLUMN IF NOT EXISTS" делает всю работу автоматически и без ошибок
+    await pool.query(`
+      ALTER TABLE lessons 
+      ADD COLUMN IF NOT EXISTS leader_id INTEGER REFERENCES users(id) ON DELETE SET NULL;
+
+      ALTER TABLE lessons 
+      ADD COLUMN IF NOT EXISTS description TEXT DEFAULT '';
+
+      ALTER TABLE users 
+      ADD COLUMN IF NOT EXISTS custom_title TEXT DEFAULT '';
+    `);
+
+    console.log('✅ Обновление схемы PostgreSQL успешно завершено!');
+  } catch (error) {
+    console.error('❌ Ошибка при обновлении схемы базы данных:', error);
+    process.exit(1);
+  } finally {
+    await pool.end();
+  }
 }
 
-// Добавляем колонку description в таблицу lessons (если нет)
-try {
-  db.exec("ALTER TABLE lessons ADD COLUMN description TEXT DEFAULT ''");
-  console.log('✅ Колонка description добавлена в lessons');
-} catch (e) {
-  console.log('Колонка description уже существует');
-}
-
-// Добавляем колонку title в таблицу users для кастомизации (если нет)
-try {
-  db.exec("ALTER TABLE users ADD COLUMN custom_title TEXT DEFAULT ''");
-  console.log('✅ Колонка custom_title добавлена в users');
-} catch (e) {
-  console.log('Колонка custom_title уже существует');
-}
-
-db.close();
-console.log('✅ Обновление схемы завершено!');
+updateSchema();
