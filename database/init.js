@@ -23,10 +23,12 @@ async function initDB() {
         id SERIAL PRIMARY KEY,
         title VARCHAR(255) NOT NULL,
         type VARCHAR(50) NOT NULL CHECK(type IN ('video', 'text', 'quiz', 'practice')),
-        content TEXT,
+        content TEXT, -- Сюда пишем путь к видеофайлу плеера!
         block INTEGER NOT NULL CHECK(block IN (1, 2)),
         module INTEGER CHECK(module IN (1, 2)),
-        order_index INTEGER NOT NULL
+        order_index INTEGER NOT NULL,
+        leader_id INTEGER,
+        FOREIGN KEY (leader_id) REFERENCES users(id) ON DELETE SET NULL
       );
 
       CREATE TABLE IF NOT EXISTS progress (
@@ -55,7 +57,6 @@ async function initDB() {
       CREATE INDEX IF NOT EXISTS idx_quiz_user ON quiz_answers(user_id);
       CREATE INDEX IF NOT EXISTS idx_users_leader ON users(leader_id);
     `);
-
     console.log('✅ Все таблицы и индексы в PostgreSQL успешно созданы!');
   } catch (error) {
     console.error('❌ Ошибка при инициализации таблиц:', error);
@@ -64,5 +65,4 @@ async function initDB() {
     await pool.end();
   }
 }
-
 initDB();

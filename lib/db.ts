@@ -1,6 +1,6 @@
 import { Pool, QueryResult } from 'pg';
 
-// Создаем пул соединений
+// Создаем пул подключений к Postgres
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
 });
@@ -8,11 +8,11 @@ const pool = new Pool({
 export default {
   /**
    * Универсальный хелпер для выполнения запросов к PostgreSQL
-   * @param text - Строка SQL запроса
-   * @param params - Массив параметров для безопасной подстановки ($1, $2...)
+   * @param text - Строка SQL запроса ($1, $2 вместо ?)
+   * @param params - Массив параметров
    */
   query: (text: string, params?: unknown[]): Promise<QueryResult> => {
     return pool.query(text, params);
   },
-  pool: pool, // Экспортируем сам пул на случай кастомных операций
+  pool: pool,
 };
