@@ -18,16 +18,19 @@ jobs:
         username: admin
         key: ${{ secrets.SSH_PRIVATE_KEY }}
         script: |
+          # Создаем рабочую директорию проекта, если её нет
           mkdir -p ~/learning-platform
           cd ~/learning-platform
           
-          if [ ! -d ".git" ]; then
-            git clone https://github.com .
-          else
-            git pull origin main
-          fi
+          # Полностью очищаем папку от старых сломанных попыток деплоя
+          rm -rf .git
           
+          # Клонируем репозиторий. URL обернут в кавычки для защиты синтаксиса Linux
+          git clone 'https://github.com' .
+          
+          # Безопасно создаем файл .env прямо на сервере из секретов GitHub
           echo "DB_PASSWORD=${{ secrets.PRODUCTION_DB_PASSWORD }}" > .env
           echo "SESSION_SECRET=${{ secrets.PRODUCTION_SESSION_SECRET }}" >> .env
           
+          # Запускаем сборку и развертывание контейнеров (Next.js + Postgres)
           sudo docker compose up -d --build
