@@ -12,7 +12,9 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     const { id: studentId } = await params;
 
     const studentResult = await db.query('SELECT id, email, name, role, leader_id FROM users WHERE id = $1', [studentId]);
-    const student = studentResult.rows[0]; // ИСПРАВЛЕНО: строго берем объект строки
+    
+    // ЖЕСТКИЙ ИСПРАВЛЕННЫЙ ФИКС: берем строго нулевой элемент массива (ОБЪЕКТ), а не массив строк!
+    const student = studentResult.rows[0] || null;
 
     if (!student) {
       return NextResponse.json({ error: 'Студент не найден' }, { status: 404 });
