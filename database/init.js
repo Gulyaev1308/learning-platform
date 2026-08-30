@@ -6,16 +6,14 @@ const pool = new Pool({
 });
 
 async function initDB() {
-  console.log('=== Инициализация базы данных PostgreSQL (Релиз MVP) ===');
+  console.log('=== Инициализация базы данных PostgreSQL ===');
   try {
-    // Чистим старые таблицы
-    console.log('🧹 Очистка старых таблиц для применения новой MVP-архитектуры...');
+    console.log('🧹 Очистка старых таблиц...');
     await pool.query('DROP TABLE IF EXISTS quiz_answers, progress, lessons, modules, blocks, premium_access, users CASCADE;');
 
     await pool.query('CREATE EXTENSION IF NOT EXISTS "uuid-ossp";');
 
     await pool.query(`
-      -- 1. ПОЛЬЗОВАТЕЛИ
       CREATE TABLE users (
         id SERIAL PRIMARY KEY,
         email VARCHAR(255) UNIQUE NOT NULL,
@@ -27,9 +25,9 @@ async function initDB() {
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       );
 
-      -- 2. ДИНАМИЧЕСКИЕ БЛОКИ
       CREATE TABLE blocks (
         id SERIAL PRIMARY KEY,
+        leader_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
         title VARCHAR(255) NOT NULL,
         description TEXT,
         order_index INTEGER NOT NULL DEFAULT 1,
@@ -37,7 +35,6 @@ async function initDB() {
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       );
 
-      -- 3. ДИНАМИЧЕСКИЕ МОДУЛИ
       CREATE TABLE modules (
         id SERIAL PRIMARY KEY,
         block_id INTEGER NOT NULL REFERENCES blocks(id) ON DELETE CASCADE,
@@ -46,7 +43,6 @@ async function initDB() {
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       );
 
-      -- 4. УРОКИ
       CREATE TABLE lessons (
         id SERIAL PRIMARY KEY,
         module_id INTEGER NOT NULL REFERENCES modules(id) ON DELETE CASCADE,
@@ -59,7 +55,6 @@ async function initDB() {
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       );
 
-      -- 5. ПРОГРЕСС ОБУЧЕНИЯ
       CREATE TABLE progress (
         id SERIAL PRIMARY KEY,
         user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -70,7 +65,6 @@ async function initDB() {
         UNIQUE(user_id, lesson_id)
       );
 
-      -- 6. ОТВЕТЫ НА ОПРОСЫ
       CREATE TABLE quiz_answers (
         id SERIAL PRIMARY KEY,
         user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -80,7 +74,6 @@ async function initDB() {
         UNIQUE(user_id, lesson_id)
       );
 
-      -- 7. ДОСТУП К ПЛАТНЫМ БЛОКАМ
       CREATE TABLE premium_access (
         id SERIAL PRIMARY KEY,
         user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -92,7 +85,6 @@ async function initDB() {
         UNIQUE(user_id, block_id)
       );
 
-      -- ИНДЕКСЫ
       CREATE INDEX idx_users_leader ON users(leader_id);
       CREATE INDEX idx_blocks_order ON blocks(order_index);
       CREATE INDEX idx_modules_block ON modules(block_id);
@@ -108,20 +100,17 @@ async function initDB() {
     const leaderHash = await bcrypt.hash('leader123', salt);
     const studentHash = await bcrypt.hash('student123', salt);
 
-    // 1. Создаем Админа
     await pool.query(
-      "INSERT INTO users (email, password_hash, name, role) VALUES ('admin@test.ru', $1, 'Главный Админ', 'admin')",
+      "INSERT INTO users (email, password_hash, name, role) VALUES ('admin@test.ru', $1, 'Главный Admin', 'admin')",
       [adminHash]
     );
 
-    // 2. Создаем Лидера (ИСПРАВЛЕНО: добавлен отсутствующий массив параметров)
     const leaderRes = await pool.query(
       "INSERT INTO users (email, password_hash, name, role, ref_code) VALUES ('leader@test.ru', $1, 'Лидер Siberian Wellness', 'leader', 'sw-leader') RETURNING id",
       [leaderHash]
     );
     const leaderId = leaderRes.rows[0].id;
 
-    // 3. Создаем Новичка
     await pool.query(
       "INSERT INTO users (email, password_hash, name, role, leader_id) VALUES ('student@test.ru', $1, 'Новичок Сетевого', 'student', $2)",
       [studentHash, leaderId]
