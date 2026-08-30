@@ -51,13 +51,15 @@ export async function GET(request: NextRequest) {
     const lessonsWithStatus = allLessons.map((lesson, index) => {
       const isCompleted = completedIds.has(lesson.id);
       
-      // Вычисляем, заблокирован ли текущий блок из-за отсутствия оплаты
-      const isBlockLockedByPayment = lesson.block_is_premium && !approvedBlockIds.has(lesson.block_id);
+      // ИСПРАВЛЕНО: Жесткая проверка — если зашел СТУДЕНТ, а блок в СУБД отмечен как премиальный 
+      // (активирован флаг в админке) и лидер еще НЕ подтвердил оплату — блок блокируется намертво.
+      const isBlockLockedByPayment = user.role === 'student' && 
+                                     Boolean(lesson.block_is_premium) === true && 
+                                     !approvedBlockIds.has(lesson.block_id);
       
       let status: string;
       
       if (isBlockLockedByPayment) {
-        // Если блок платный и неоплачен — строго вешаем замок 'locked' на этот урок
         status = 'locked';
       } else if (isCompleted) {
         status = 'completed';
@@ -67,8 +69,7 @@ export async function GET(request: NextRequest) {
         status = 'locked';
       }
       
-      // ИСПРАВЛЕНО: Если мы наткнулись на неоплаченный блок, мы принудительно гасим 
-      // флаг продвижения (previousCompleted = false). Ни один следующий урок не откроется сам!
+      // Блокируем продвижение по «лестнице» вперед
       if (isBlockLockedByPayment) {
         previousCompleted = false;
       } else {
