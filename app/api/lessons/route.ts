@@ -9,11 +9,12 @@ export async function GET(request: NextRequest) {
 
     const currentUserId = session.userId || (session as any).id;
 
+    // 1. Получаем данные студента
     const userResult = await db.query('SELECT * FROM users WHERE id = $1', [currentUserId]);
     const user = userResult.rows[0];
     if (!user) return NextResponse.json({ error: 'Пользователь не найден' }, { status: 404 });
 
-    // Получаем весь контент
+    // 2. Получаем всю структуру обучения (блоки, модули, уроки) по порядку
     const allLessonsResult = await db.query(`
       SELECT 
         l.*, 
@@ -28,7 +29,7 @@ export async function GET(request: NextRequest) {
       ORDER BY b.order_index ASC, m.order_index ASC, l.order_index ASC
     `);
 
-    // Проверяем одобрение платежей лидером
+    // 3. Проверяем, какие платные блоки были ОДОБРЕНЫ лидером для этого студента
     const paymentsResult = await db.query(
       "SELECT block_id FROM premium_access WHERE user_id = $1 AND status = 'approved'",
       [currentUserId]
@@ -37,6 +38,7 @@ export async function GET(request: NextRequest) {
 
     const allLessons = allLessonsResult.rows;
 
+    // 4. Получаем список пройденных уроков
     const progressResult = await db.query(
       "SELECT lesson_id FROM progress WHERE user_id = $1 AND status = 'completed'",
       [currentUserId]
@@ -45,14 +47,18 @@ export async function GET(request: NextRequest) {
 
     let previousCompleted = true;
     
+    // 5. Просчитываем статусы строго по правилам вашей "лестницы"
     const lessonsWithStatus = allLessons.map((lesson, index) => {
       const isCompleted = completedIds.has(lesson.id);
+      
+      // Вычисляем, заблокирован ли текущий блок из-за отсутствия оплаты
+      const isBlockLockedByPayment = lesson.block_is_premium && !approvedBlockIds.has(lesson.block_id);
+      
       let status: string;
       
-      // ИСПРАВЛЕНО: Возвращаем СТРОГО стандартный статус 'locked'.
-      // Никакой скрытый рантайм-кейс фронтенда больше не пропустит новичка на платный контент.
-      if (lesson.block_is_premium && !approvedBlockIds.has(lesson.block_id)) {
-        status = 'locked'; 
+      if (isBlockLockedByPayment) {
+        // Если блок платный и неоплачен — строго вешаем замок 'locked' на этот урок
+        status = 'locked';
       } else if (isCompleted) {
         status = 'completed';
       } else if (index === 0 || previousCompleted) {
@@ -61,8 +67,9 @@ export async function GET(request: NextRequest) {
         status = 'locked';
       }
       
-      // Намертво блокируем продвижение по «лестнице» вперед
-      if (lesson.block_is_premium && !approvedBlockIds.has(lesson.block_id)) {
+      // ИСПРАВЛЕНО: Если мы наткнулись на неоплаченный блок, мы принудительно гасим 
+      // флаг продвижения (previousCompleted = false). Ни один следующий урок не откроется сам!
+      if (isBlockLockedByPayment) {
         previousCompleted = false;
       } else {
         previousCompleted = isCompleted;
@@ -71,6 +78,7 @@ export async function GET(request: NextRequest) {
       return { ...lesson, status };
     });
 
+    // Группируем уроки для сохранения исходной структуры фронтенда
     const blocksMap = new Map();
     for (const lesson of lessonsWithStatus) {
       if (!blocksMap.has(lesson.block_id)) {
@@ -78,8 +86,6 @@ export async function GET(request: NextRequest) {
           id: lesson.block_id,
           title: lesson.block_title,
           is_premium: lesson.block_is_premium,
-          // Передаем флаг блокировки блока, чтобы фронтенд вывел его на экран, но с иконкой замочка
-          is_locked_by_payment: lesson.block_is_premium && !approvedBlockIds.has(lesson.block_id),
           modules: new Map(),
         });
       }
