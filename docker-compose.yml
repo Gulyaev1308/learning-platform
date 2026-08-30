@@ -1,13 +1,11 @@
-version: '3.8'
-
 services:
-  # 1. База данных PostgreSQL (скрыта от интернета)
+  # 1. База данных PostgreSQL (полностью скрыта от интернета)
   postgres-db:
     image: postgres:15-alpine
     container_name: learning-postgres
     environment:
       POSTGRES_USER: learning_admin
-      POSTGRES_PASSWORD: ${DB_PASSWORD} # Пароль безопасно подставится из GitHub Secrets
+      POSTGRES_PASSWORD: "MesaSuperPassword2026!"
       POSTGRES_DB: learning_platform_db
     volumes:
       - pg_data:/var/lib/postgresql/data
@@ -18,14 +16,13 @@ services:
     build: .
     container_name: learning-platform-app
     ports:
-      - "80:3000" # Пробрасываем стандартный веб-порт сервера наружу
+      - "80:3000"
     environment:
-      # Строка подключения к Postgres. Вместо IP пишем имя сервиса "postgres-db"
-      DATABASE_URL: "postgresql://learning_admin:${DB_PASSWORD}@postgres-db:5432/learning_platform_db?schema=public"
-      SESSION_SECRET: ${SESSION_SECRET}
+      DATABASE_URL: "postgresql://learning_admin:MesaSuperPassword2026!@postgres-db:5432/learning_platform_db?schema=public"
+      SESSION_SECRET: "super-secret-padlock-key-for-iron-session-32"
     restart: always
     depends_on:
       - postgres-db
 
 volumes:
-  pg_data: # Локальный диск на сервере Cloud.ru для хранения данных базы
+  pg_data:
