@@ -1,46 +1,24 @@
-const Database = require('better-sqlite3');
-const path = require('path');
+const { Pool } = require('pg');
 
-const dbPath = path.join(process.cwd(), 'database', 'learning.db');
-const db = new Database(dbPath);
+const pool = new Pool({
+  connectionString: process.env.DATABASE_URL,
+});
 
-// Создаем таблицу блоков
-db.exec(`
-  CREATE TABLE IF NOT EXISTS blocks (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    leader_id INTEGER,
-    title TEXT NOT NULL,
-    order_index INTEGER NOT NULL DEFAULT 1,
-    FOREIGN KEY (leader_id) REFERENCES users(id)
-  );
-`);
+async function updateStructure() {
+  console.log('=== Обновление структуры курсов в PostgreSQL ===');
+  try {
+    // Безопасно проверяем и добавляем новые колонки, если это необходимо
+    await pool.query(`
+      ALTER TABLE lessons ADD COLUMN IF NOT EXISTS content TEXT;
+      ALTER TABLE lessons ADD COLUMN IF NOT EXISTS order_index INTEGER DEFAULT 0;
+    `);
 
-// Создаем таблицу модулей
-db.exec(`
-  CREATE TABLE IF NOT EXISTS modules (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    block_id INTEGER NOT NULL,
-    title TEXT NOT NULL,
-    order_index INTEGER NOT NULL DEFAULT 1,
-    FOREIGN KEY (block_id) REFERENCES blocks(id)
-  );
-`);
-
-// Добавляем module_id в lessons если нет
-try {
-  db.exec("ALTER TABLE lessons ADD COLUMN module_id INTEGER REFERENCES modules(id)");
-  console.log('✅ module_id добавлен в lessons');
-} catch (e) {
-  console.log('module_id уже существует');
+    console.log('✅ Структура успешно обновлена!');
+  } catch (error) {
+    console.error('❌ Ошибка при обновлении структуры:', error);
+  } finally {
+    await pool.end();
+  }
 }
 
-// Добавляем block_id в lessons если нет
-try {
-  db.exec("ALTER TABLE lessons ADD COLUMN block_id INTEGER REFERENCES blocks(id)");
-  console.log('✅ block_id добавлен в lessons');
-} catch (e) {
-  console.log('block_id уже существует');
-}
-
-console.log('✅ Структура обновлена!');
-db.close();
+updateStructure();

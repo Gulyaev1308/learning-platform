@@ -1,23 +1,25 @@
-const Database = require('better-sqlite3');
-const path = require('path');
+const { Pool } = require('pg');
 
-const dbPath = path.join(process.cwd(), 'database', 'learning.db');
-const db = new Database(dbPath);
+const pool = new Pool({
+  connectionString: process.env.DATABASE_URL,
+});
 
-// Создаем таблицу настроек для каждого лидера
-db.exec(`
-  CREATE TABLE IF NOT EXISTS leader_settings (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    leader_id INTEGER NOT NULL,
-    block1_name TEXT DEFAULT 'Блок 1',
-    block2_name TEXT DEFAULT 'Блок 2',
-    module1_name TEXT DEFAULT 'Модуль 1',
-    module2_name TEXT DEFAULT 'Модуль 2',
-    lesson_name TEXT DEFAULT 'Урок',
-    FOREIGN KEY (leader_id) REFERENCES users(id),
-    UNIQUE(leader_id)
-  );
-`);
+async function updateSettings() {
+  console.log('=== Обновление настроек в PostgreSQL ===');
+  try {
+    // Пример перевода логики на Postgres: обновляем заголовок у админа
+    await pool.query(`
+      UPDATE users 
+      SET custom_title = $1 
+      WHERE role = 'admin';
+    `, ['Главная панель обучения']);
 
-console.log('✅ Таблица настроек создана!');
-db.close();
+    console.log('✅ Настройки успешно обновлены!');
+  } catch (error) {
+    console.error('❌ Ошибка при обновлении настроек:', error);
+  } finally {
+    await pool.end();
+  }
+}
+
+updateSettings();
