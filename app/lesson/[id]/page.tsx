@@ -11,6 +11,8 @@ export default function LessonPage() {
   const [quizContent, setQuizContent] = useState<any>(null);
   const [videoEnded, setVideoEnded] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [answers, setAnswers] = useState<any>({});
+  const [sending, setSending] = useState(false);
 
   useEffect(() => {
     async function fetchLesson() {
@@ -26,15 +28,41 @@ export default function LessonPage() {
       } catch (err) {
         console.error(err);
       } finally {
-        // ОПЕЧАТКА ИСПРАВЛЕНА: теперь тут строго 'finally' с двумя 'll'
         setLoading(false);
       }
     }
     if (lessonId) fetchLesson();
   }, [lessonId]);
 
-  if (loading) return <div className="p-8 text-center text-gray-600 font-medium">Загрузка урока...</div>;
-  if (!lesson) return <div className="p-8 text-center text-red-500 font-medium">Урок не найден</div>;
+  const handleSubmitQuiz = async () => {
+    if (sending) return;
+    setSending(true);
+    try {
+      const formattedAnswers = quizContent.questions.map((q: any, i: number) => ({
+        question: q.text || q.question,
+        answer: answers[i] || 'Нет ответа'
+      }));
+
+      await fetch(`/api/lessons/${lessonId}/quiz`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ answers: formattedAnswers })
+      });
+
+      await fetch(`/api/lessons/${lessonId}/complete`, { method: 'POST' });
+
+      alert('Результаты успешно отправлены! Урок пройден.');
+      router.push('/dashboard');
+      router.refresh();
+    } catch (err) {
+      alert('Ошибка при отправке ответов');
+    } finally {
+      setSending(false);
+    }
+  };
+
+  if (loading) return <div className="min-h-screen flex items-center justify-center text-gray-400">Загрузка урока...</div>;
+  if (!lesson) return <div className="min-h-screen flex items-center justify-center text-red-500">Урок не найден</div>;
 
   const isQuizAvailable = lesson.type !== 'video' || videoEnded;
 
@@ -50,64 +78,89 @@ export default function LessonPage() {
   }
 
   return (
-    <div className="max-w-4xl mx-auto p-4 sm:p-6 space-y-6 bg-white text-gray-900 rounded-xl shadow-xs border border-gray-100 mt-4">
-      <h1 className="text-2xl font-bold text-gray-900 border-b border-gray-200 pb-3">{lesson.title}</h1>
-      
-      {lesson.type === 'video' && videoSrc && (
-        <div className="aspect-video w-full bg-black rounded-xl overflow-hidden shadow-md">
-          <video 
-            src={videoSrc} 
-            controls 
-            controlsList="nodownload"
-            onEnded={() => setVideoEnded(true)}
-            className="w-full h-full"
-          />
+    <div className="min-h-screen w-full bg-inherit p-4 sm:p-6 lg:p-8 space-y-6">
+      <div className="max-w-7xl mx-auto space-y-6 text-gray-800">
+        <div className="flex items-center justify-between border-b border-gray-200 pb-4">
+          <h1 className="text-2xl font-bold">{lesson.title}</h1>
+          <button onClick={() => router.push('/dashboard')} className="text-sm bg-gray-100 hover:bg-gray-200 text-gray-700 px-4 py-2 rounded-lg transition">
+            Назад к модулям
+          </button>
         </div>
-      )}
-
-      {lesson.description && (
-        <div className="bg-gray-50 p-5 rounded-xl border border-gray-200">
-          <h2 className="text-base font-semibold text-gray-800 mb-2">Описание урока:</h2>
-          <p className="text-gray-600 leading-relaxed whitespace-pre-wrap text-sm">{lesson.description}</p>
-        </div>
-      )}
-
-      {quizContent && quizContent.questions && quizContent.questions.length > 0 && (
-        <div className={`transition-all duration-300 ${isQuizAvailable ? 'opacity-100' : 'opacity-50 pointer-events-none'}`}>
-          <div className="bg-blue-50/60 p-5 rounded-xl border border-blue-100 space-y-4">
-            <h2 className="text-base font-semibold text-blue-900 flex items-center gap-2">
-              📋 Тест / Опрос к уроку: 
-              {!isQuizAvailable && <span className="text-xs text-amber-600 font-normal bg-amber-100 px-2 py-0.5 rounded-full ml-2">Доступно после полного просмотра видео</span>}
-            </h2>
-            
-            {isQuizAvailable && (
-              <>
-                {quizContent.questions.map((q: any, i: number) => (
-                  <div key={i} className="bg-white p-4 rounded-lg border border-blue-50 shadow-2xs">
-                    <p className="font-medium text-gray-800 text-sm mb-2">{i + 1}. {q.text || q.question}</p>
-                    {quizContent.type === 'options' && q.options && (
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                        {q.options.map((opt: string, idx: number) => (
-                          <label key={idx} className="flex items-center gap-2 p-2 border border-gray-200 rounded-lg hover:bg-gray-50 cursor-pointer text-sm text-gray-600">
-                            <input type="radio" name={`q-${i}`} value={opt} className="text-blue-600" />
-                            {opt}
-                          </label>
-                        ))}
-                      </div>
-                    )}
-                    {quizContent.type === 'free_text' && (
-                      <textarea rows={3} placeholder="Введите ваш ответ здесь..." className="w-full p-2 bg-white border border-gray-300 rounded-lg text-sm text-gray-800 focus:outline-none focus:border-blue-400" />
-                    )}
-                  </div>
-                ))}
-                <button className="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg text-sm shadow-xs transition">
-                  Отправить ответы
-                </button>
-              </>
-            )}
+        
+        {lesson.type === 'video' && videoSrc && (
+          <div className="w-full bg-black rounded-2xl overflow-hidden shadow-2xl aspect-video max-h-[70vh] mx-auto">
+            <video 
+              src={videoSrc} 
+              controls 
+              controlsList="nodownload"
+              onEnded={() => setVideoEnded(true)}
+              className="w-full h-full object-contain"
+            />
           </div>
-        </div>
-      )}
+        )}
+
+        {lesson.description && (
+          <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-xs">
+            <h2 className="text-lg font-semibold mb-2">Описание урока:</h2>
+            <p className="text-sm text-gray-600 leading-relaxed whitespace-pre-wrap">{lesson.description}</p>
+          </div>
+        )}
+
+        {quizContent && quizContent.questions && quizContent.questions.length > 0 && (
+          <div className={`transition-all duration-300 ${isQuizAvailable ? 'opacity-100' : 'opacity-40 pointer-events-none'}`}>
+            <div className="bg-blue-50 p-6 rounded-2xl border border-blue-100 space-y-4">
+              <h2 className="text-lg font-semibold text-blue-900 flex items-center gap-2">
+                📋 Тест / Опрос к уроку: 
+                {!isQuizAvailable && <span className="text-xs text-amber-600 font-normal bg-amber-100 px-3 py-1 rounded-full ml-2">Станет доступно после просмотра видео</span>}
+              </h2>
+              
+              {isQuizAvailable && (
+                <div className="space-y-4">
+                  {quizContent.questions.map((q: any, i: number) => (
+                    <div key={i} className="bg-white p-4 rounded-xl border border-gray-200">
+                      <p className="font-medium text-sm mb-3 text-gray-800">{i + 1}. {q.text || q.question}</p>
+                      {quizContent.type === 'options' && q.options && (
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                          {q.options.map((opt: string, idx: number) => (
+                            <label key={idx} className="flex items-center gap-3 p-3 bg-gray-50 border border-gray-200 rounded-xl hover:bg-gray-100 cursor-pointer transition text-sm text-gray-700">
+                              <input 
+                                type="radio" 
+                                name={`q-${i}`} 
+                                value={opt} 
+                                onChange={(e) => setAnswers({ ...answers, [i]: e.target.value })}
+                                className="text-blue-600 h-4 w-4" 
+                              />
+                              {opt}
+                            </label>
+                          ))}
+                        </div>
+                      )}
+                      {quizContent.type === 'free_text' && (
+                        <textarea 
+                          rows={3} 
+                          placeholder="Введите ваш развернутый ответ здесь..." 
+                          onChange={(e) => setAnswers({ ...answers, [i]: e.target.value })}
+                          className="w-full p-3 bg-white border border-gray-200 rounded-xl text-sm text-gray-800 focus:outline-none focus:border-blue-500 transition" 
+                        />
+                      )}
+                    </div>
+                  ))}
+                  
+                  <div className="pt-2">
+                    <button 
+                      onClick={handleSubmitQuiz}
+                      disabled={sending}
+                      className="w-full sm:w-auto px-6 py-3 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white font-semibold rounded-xl text-sm shadow-md transition-all active:scale-98"
+                    >
+                      {sending ? 'Сохранение результатов...' : '🚀 Отправить ответы и завершить урок'}
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+      </div>
     </div>
   );
 }

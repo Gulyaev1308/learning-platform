@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import LogoutButton from '@/components/ui/LogoutButton';
 
 interface Leader { id: number; email: string; name: string; students_count: number; }
-interface Block { id: number; title: string; order_index: number; modules: Module[]; }
+interface Block { id: number; title: string; order_index: number; is_premium?: boolean; modules: Module[]; }
 interface Module { id: number; title: string; order_index: number; lessons: Lesson[]; }
 interface Lesson { id: number; title: string; type: string; content: string; description: string; quiz_data?: string; homework_data?: string; order_index: number; }
 
@@ -142,7 +142,7 @@ export default function AdminPage() {
               {structure.map(block => (
                 <div key={block.id} className={`p-2 rounded-lg border-2 ${currentBlockId === block.id ? 'border-blue-600 bg-blue-50' : 'border-gray-300 bg-white'}`}>
                   <div className="flex justify-between items-center gap-1">
-                    <button onClick={() => { setCurrentBlockId(block.id); setCurrentModuleId(null); }} className="font-bold text-gray-900 text-sm flex-1 text-left">{block.title}</button>
+                    <button onClick={() => { setCurrentBlockId(block.id); setCurrentModuleId(null); }} className="font-bold text-gray-900 text-sm flex-1 text-left">{block.title} {block.is_premium && <span className="ml-2 text-xs bg-amber-100 text-amber-800 px-2 py-0.5 rounded-sm font-normal">🔒 Платный</span>}</button>
                     <button onClick={() => { setEditingBlock(block); setShowBlockForm(true); }} className="text-blue-700 text-xs">✏️</button>
                     <button onClick={() => handleDeleteBlock(block.id)} className="text-red-700 text-xs">🗑</button>
                   </div>
@@ -195,7 +195,55 @@ export default function AdminPage() {
         setShowLeaderForm(false); fetchLeaders();
       }} onCancel={() => setShowLeaderForm(false)} />}
 
-      {showBlockForm && selectedLeader && <SimpleForm title="Блок" initialValue={editingBlock?.title || ''} onSave={(title: string) => handleSaveBlock({ id: editingBlock?.id, title })} onCancel={() => { setShowBlockForm(false); setEditingBlock(null); }} />}
+      {showBlockForm && selectedLeader && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-xl p-6 max-w-md w-full shadow-xl space-y-4">
+            <h3 className="text-lg font-bold text-gray-900">{editingBlock ? 'Редактировать блок' : 'Создать блок'}</h3>
+            <div className="space-y-3">
+              <div>
+                <label className="text-xs font-semibold text-gray-500 block mb-1">Название блока</label>
+                <input 
+                  type="text" 
+                  id="block-title-input"
+                  defaultValue={editingBlock?.title || ''} 
+                  className="w-full border border-gray-300 rounded-lg p-2 text-sm focus:outline-none focus:border-blue-500 text-gray-800"
+                />
+              </div>
+              <label className="flex items-center gap-2 cursor-pointer p-2 bg-gray-50 border border-gray-200 rounded-lg text-sm text-gray-700">
+                <input 
+                  type="checkbox" 
+                  id="block-premium-input"
+                  defaultChecked={editingBlock?.is_premium || false}
+                  className="rounded text-blue-600 focus:ring-0"
+                />
+                <span>🔒 Платный блок (требует подтверждения перевода на карту)</span>
+              </label>
+            </div>
+            <div className="flex justify-end gap-2 pt-2">
+              <button 
+                onClick={() => { setShowBlockForm(false); setEditingBlock(null); }} 
+                className="px-4 py-2 border border-gray-200 rounded-lg text-sm text-gray-600 hover:bg-gray-50 transition"
+              >
+                Отмена
+              </button>
+              <button 
+                onClick={() => {
+                  const titleEl = document.getElementById('block-title-input');
+                  const premiumEl = document.getElementById('block-premium-input');
+                  handleSaveBlock({
+                    id: editingBlock?.id,
+                    title: titleEl.value,
+                    is_premium: premiumEl.checked
+                  });
+                }} 
+                className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg text-sm transition"
+              >
+                Сохранить
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {showModuleForm && currentBlockId && <SimpleForm title="Модуль" initialValue={editingModule?.title || ''} onSave={(title: string) => handleSaveModule({ id: editingModule?.id, title })} onCancel={() => { setShowModuleForm(false); setEditingModule(null); }} />}
 
