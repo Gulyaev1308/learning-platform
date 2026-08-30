@@ -13,28 +13,27 @@ async function seedDB() {
     const leaderHash = await bcrypt.hash('leader123', saltRounds);
     const studentHash = await bcrypt.hash('student123', saltRounds);
 
-    // Удаляем всё и сбрасываем счетчики ID до 1
+    // Полностью очищаем таблицы перед заполнением
     await pool.query('TRUNCATE TABLE users RESTART IDENTITY CASCADE');
     await pool.query('TRUNCATE TABLE lessons RESTART IDENTITY CASCADE');
 
-    // 1. Создаем эталонного Админа
+    // 1. Создаем Администратора
     await pool.query(`
       INSERT INTO users (email, password_hash, name, role)
       VALUES ($1, $2, $3, $4)
     `, ['admin@test.ru', adminHash, 'Александр (Админ)', 'admin']);
     console.log('   ✔ ADMIN: admin@test.ru | admin123');
 
-    // 2. Создаем эталонного Лидера
+    // 2. Создаем Лидера (СТРОГО ЧЕРЕЗ rows[0].id)
     const leaderRes = await pool.query(`
       INSERT INTO users (email, password_hash, name, role)
       VALUES ($1, $2, $3, $4) RETURNING id
     `, ['leader@test.ru', leaderHash, 'Иван (Лидер)', 'leader']);
     
-    // В pg результат возвращается в массив rows. Забираем ID первого элемента:
-    const leaderId = leaderRes.rows[0].id; 
+    const leaderId = leaderRes.rows[0].id; // ИСПРАВЛЕНО НА СТАНДАРТ PG
     console.log(`   ✔ LEADER (ID: ${leaderId}): leader@test.ru | leader123`);
 
-    // 3. Создаем эталонного Ученика
+    // 3. Создаем Ученика, привязанного к Лидеру
     await pool.query(`
       INSERT INTO users (email, password_hash, name, role, leader_id)
       VALUES ($1, $2, $3, $4, $5)
@@ -45,12 +44,12 @@ async function seedDB() {
     await pool.query(`
       INSERT INTO lessons (title, type, content, block, module, order_index, leader_id)
       VALUES ($1, $2, $3, $4, $5, $6, $7)
-    `, ['Введение в платформу (Видео-урок)', 'video', '/videos/lesson1.mp4', 1, 1, 1, null]);
-    console.log('   ✔ ВИДЕО-УРОК: Добавлен в Блок 1, Модуль 1. Файл: /videos/lesson1.mp4');
+    `, ['Введение в платформу (Видео-урок)', 'video', 'lesson1.mp4', 1, 1, 1, null]);
+    console.log('   ✔ ВИДЕО-УРОК: Файл: lesson1.mp4 добавлен в Блок 1, Модуль 1');
 
-    console.log('\n🚀 База данных успешно подготовлена к запуску реальных людей!');
+    console.log('\n🚀 База данных успешно наполнена эталонными профилями!');
   } catch (error) {
-    console.error('❌ Ошибка подготовки данных:', error);
+    console.error('❌ Критическая ошибка сидинга базы:', error);
     process.exit(1);
   } finally {
     await pool.end();
