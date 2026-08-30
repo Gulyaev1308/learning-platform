@@ -2,34 +2,36 @@ name: Deploy Learning Platform
 
 on:
   push:
-    branches: [ main ] # Робот сработает, когда ты сделаешь push в ветку main
+    branches: [ main ]
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
     steps:
+    # Обновили версию checkout до v4.2.2 (или v4), которая полностью совместима с Node 24
     - name: Checkout code
-      uses: actions/checkout@v4
+      uses: actions/checkout@v4.2.2
 
     - name: Deploy to Cloud.ru via SSH
-      uses: appleboy/ssh-action@v1.0.3
+      uses: appleboy/ssh-action@v1.2.0 # Обновили до последней стабильной версии
       with:
         host: ${{ secrets.SERVER_IP }}
-        username: admin  # Твой проверенный юзер на сервере!
+        username: admin
         key: ${{ secrets.SSH_PRIVATE_KEY }}
         script: |
           mkdir -p ~/learning-platform
           cd ~/learning-platform
           
+          # Если репозиторий приватный, мы используем токен самого GitHub для безопасного скачивания кода
           if [ ! -d ".git" ]; then
-            git clone https://github.com{{ github.repository }}.git .
+            git clone https://x-access-token:${{ secrets.GITHUB_TOKEN }}@://github.com{{ github.repository }}.git .
           else
             git pull origin main
           fi
           
-          # Безопасно пишем секреты в файл .env прямо на сервере
+          # Безопасно пишем секреты в .env
           echo "DB_PASSWORD=${{ secrets.PRODUCTION_DB_PASSWORD }}" > .env
           echo "SESSION_SECRET=${{ secrets.PRODUCTION_SESSION_SECRET }}" >> .env
           
-          # Пересобираем и запускаем контейнеры
+          # Запускаем контейнеры
           sudo docker compose up -d --build
