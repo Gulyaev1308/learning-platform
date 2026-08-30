@@ -22,16 +22,17 @@ jobs:
           mkdir -p ~/learning-platform
           cd ~/learning-platform
           
-          # Если репозиторий приватный, мы используем токен самого GitHub для безопасного скачивания кода
+          # Если папки .git еще нет — клонируем проект напрямую
           if [ ! -d ".git" ]; then
-            git clone https://x-access-token:${{ secrets.GITHUB_TOKEN }}@://github.com{{ github.repository }}.git .
+            git clone https://github.com .
           else
+            # Если проект уже есть — просто скачиваем обновления
             git pull origin main
           fi
           
-          # Безопасно пишем секреты в .env
+          # Безопасно пишем секреты в .env прямо на сервере
           echo "DB_PASSWORD=${{ secrets.PRODUCTION_DB_PASSWORD }}" > .env
           echo "SESSION_SECRET=${{ secrets.PRODUCTION_SESSION_SECRET }}" >> .env
           
-          # Запускаем контейнеры
+          # Запускаем сборку Docker-контейнеров Next.js + Postgres
           sudo docker compose up -d --build
