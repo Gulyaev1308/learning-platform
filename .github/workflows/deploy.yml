@@ -18,15 +18,20 @@ jobs:
         username: admin
         key: ${{ secrets.SSH_PRIVATE_KEY }}
         script: |
-          # 1. Заходим в папку проекта или создаем её, если её нет
+          # 1. Заходим в папку проекта или создаем её
           mkdir -p ~/learning-platform
           cd ~/learning-platform
           
-          # 2. Полностью и принудительно очищаем всё содержимое папки перед клонированием
+          # 2. Полностью и принудительно очищаем всё содержимое папки
           sudo rm -rf ./* ./.* 2>/dev/null || true
           
-          # 3. Клонируем чистую копию репозитория с GitHub
-          git clone 'https://github.com' .
+          # 3. Хитрый обход бага парсера: собираем URL из частей через переменные
+          DOMAIN="github.com"
+          REPO_PATH="Gulyaev1308/learning-platform.git"
+          FULL_URL="https://${DOMAIN}/${REPO_PATH}"
+          
+          # Клонируем проект по склеенной ссылке
+          git clone "$FULL_URL" .
           
           # 4. Создаем файл конфигурации .env на сервере
           echo "DB_PASSWORD=${{ secrets.PRODUCTION_DB_PASSWORD }}" > .env
