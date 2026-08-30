@@ -22,7 +22,7 @@ export async function getCurrentUser() {
   if (!targetId) return null;
 
   const result = await db.query('SELECT * FROM users WHERE id = $1', [targetId]);
-  // ИСПРАВЛЕНО: строго возвращаем объект первой строки [0]
+  // ИСПРАВЛЕНО: возвращаем строго первый элемент массива (объект юзера)
   return result.rows[0] || null; 
 }
 
