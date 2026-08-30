@@ -11,13 +11,18 @@ export async function GET(request: NextRequest) {
 
     const currentLeaderId = session.userId || (session as any).id;
 
-    // Выбираем всех студентов, закрепленных за этим лидером
+    // Получаем учеников лидера
     const result = await db.query(
       'SELECT id, email, name, role, created_at FROM users WHERE leader_id = $1 AND role = $2 ORDER BY id DESC',
       [currentLeaderId, 'student']
     );
 
-    return NextResponse.json({ success: true, students: result.rows });
+    // ИСПРАВЛЕНО: Возвращаем и учеников, и leaderId, как того требует страница leader/page.tsx
+    return NextResponse.json({ 
+      success: true, 
+      students: result.rows,
+      leaderId: currentLeaderId 
+    });
   } catch (error) {
     console.error('Error in GET /api/leader/students:', error);
     return NextResponse.json({ error: 'Внутренняя ошибка сервера' }, { status: 500 });
