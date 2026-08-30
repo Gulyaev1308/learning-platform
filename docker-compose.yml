@@ -39,7 +39,7 @@ services:
     depends_on:
       postgres-db:
         condition: service_healthy
-    command: sh -c "node database/init.js && node database/update-schema.js && node database/seed.js && node server.js"
+    command: sh -c "node database/init.js && node server.js"
 
 volumes:
   pg_data:
