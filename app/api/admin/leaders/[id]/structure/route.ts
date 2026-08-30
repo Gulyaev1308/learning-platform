@@ -13,10 +13,8 @@ export async function GET(
       return NextResponse.json({ error: 'Доступ запрещен' }, { status: 403 });
     }
 
-    const { id: leaderId } = await params;
-
-    // Получаем всё одним запросом
-    const structure = (await db.query(`
+    // Соединяем правильные таблицы blocks, modules и lessons через INNER/LEFT JOIN
+    const structureResult = await db.query(`
       SELECT 
         b.id as block_id,
         b.title as block_title,
@@ -33,14 +31,15 @@ export async function GET(
       FROM blocks b
       LEFT JOIN modules m ON m.block_id = b.id
       LEFT JOIN lessons l ON l.module_id = m.id
-      WHERE b.leader_id = $1
-      ORDER BY b.order_index, m.order_index, l.order_index
-    `, [leaderId])).rows as any[];
+      ORDER BY b.order_index ASC, m.order_index ASC, l.order_index ASC
+    `);
 
-    // Группируем в структуру
+    const structure = structureResult.rows;
     const blocksMap = new Map();
 
     for (const row of structure) {
+      if (!row.block_id) continue;
+
       if (!blocksMap.has(row.block_id)) {
         blocksMap.set(row.block_id, {
           id: row.block_id,
@@ -74,7 +73,6 @@ export async function GET(
       }
     }
 
-    // Конвертируем Map в массивы
     const result = [];
     for (const block of blocksMap.values()) {
       const modules = [];
