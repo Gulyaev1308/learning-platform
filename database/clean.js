@@ -1,38 +1,34 @@
-const Database = require('better-sqlite3');
-const path = require('path');
+const { Pool } = require('pg');
 
-const dbPath = path.join(process.cwd(), 'database', 'learning.db');
-const db = new Database(dbPath);
+const pool = new Pool({
+  connectionString: process.env.DATABASE_URL,
+});
 
-console.log('=== Очистка базы данных ===');
+async function cleanDB() {
+  console.log('=== Очистка базы данных PostgreSQL ===');
+  try {
+    // В Postgres TRUNCATE очищает таблицы гораздо быстрее, а RESTART IDENTITY сбрасывает счетчики ID к 1
+    await pool.query('TRUNCATE TABLE quiz_answers RESTART IDENTITY CASCADE');
+    console.log('✅ quiz_answers очищены и счетчик ID сброшен');
 
-// Очищаем таблицы
-db.exec('DELETE FROM quiz_answers');
-console.log('✅ quiz_answers очищены');
+    await pool.query('TRUNCATE TABLE progress RESTART IDENTITY CASCADE');
+    console.log('✅ progress очищен и счетчик ID сброшен');
 
-db.exec('DELETE FROM progress');
-console.log('✅ progress очищен');
+    await pool.query('TRUNCATE TABLE lessons RESTART IDENTITY CASCADE');
+    console.log('✅ lessons очищены и счетчик ID сброшен');
 
-db.exec('DELETE FROM lessons');
-console.log('✅ lessons очищены');
+    // Подсчет оставшихся пользователей
+    const result = await pool.query('SELECT COUNT(*) as count FROM users');
+    console.log(`✅ Пользователи сохранены: ${result.rows[0].count}`);
 
-db.exec('DELETE FROM modules');
-console.log('✅ modules очищены');
+    console.log('\n=== Готово! База очищена ===');
+    console.log('Уроки, прогресс и ответы удалены. Пользователи в безопасности.');
 
-db.exec('DELETE FROM blocks');
-console.log('✅ blocks очищены');
+  } catch (error) {
+    console.error('❌ Ошибка при очистке базы данных:', error);
+  } finally {
+    await pool.end();
+  }
+}
 
-// Сбрасываем автоинкремент
-db.exec("DELETE FROM sqlite_sequence WHERE name IN ('lessons', 'modules', 'blocks', 'quiz_answers', 'progress')");
-console.log('✅ Автоинкремент сброшен');
-
-// Оставляем пользователей (лидеры, ученики, админ)
-const usersCount = db.prepare('SELECT COUNT(*) as count FROM users').get();
-console.log(`✅ Пользователи сохранены: ${usersCount.count}`);
-
-console.log('');
-console.log('=== Готово! База очищена ===');
-console.log('Блоки, модули, уроки удалены.');
-console.log('Пользователи сохранены.');
-
-db.close();
+cleanDB();

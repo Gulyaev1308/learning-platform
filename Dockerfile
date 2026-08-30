@@ -21,4 +21,6 @@ ENV PORT=3000
 ENV HOSTNAME="0.0.0.0"
 
 # Запускаем продакшн сервер Next.js напрямую, минуя старый init.js
-CMD ["node", "server.js"]
+# Сначала запускаем скрипт инициализации таблиц, затем поднимаем сервер Next.js
+CMD ["sh", "-c", "node database/init.js && node server.js"]
+
