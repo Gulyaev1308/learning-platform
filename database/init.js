@@ -8,7 +8,7 @@ const pool = new Pool({
 async function initDB() {
   console.log('=== Инициализация базы данных PostgreSQL (Релиз MVP) ===');
   try {
-    // Принудительно очищаем старые конфликтующие структуры перед накатыванием новой схемы
+    // Чистим старые таблицы
     console.log('🧹 Очистка старых таблиц для применения новой MVP-архитектуры...');
     await pool.query('DROP TABLE IF EXISTS quiz_answers, progress, lessons, modules, blocks, premium_access, users CASCADE;');
 
@@ -92,7 +92,7 @@ async function initDB() {
         UNIQUE(user_id, block_id)
       );
 
-      -- ИНДЕКСЫ НА ЧИСТЫЕ ТАБЛИЦЫ
+      -- ИНДЕКСЫ
       CREATE INDEX idx_users_leader ON users(leader_id);
       CREATE INDEX idx_blocks_order ON blocks(order_index);
       CREATE INDEX idx_modules_block ON modules(block_id);
@@ -108,16 +108,20 @@ async function initDB() {
     const leaderHash = await bcrypt.hash('leader123', salt);
     const studentHash = await bcrypt.hash('student123', salt);
 
+    // 1. Создаем Админа
     await pool.query(
       "INSERT INTO users (email, password_hash, name, role) VALUES ('admin@test.ru', $1, 'Главный Админ', 'admin')",
       [adminHash]
     );
 
+    // 2. Создаем Лидера (ИСПРАВЛЕНО: добавлен отсутствующий массив параметров)
     const leaderRes = await pool.query(
-      "INSERT INTO users (email, password_hash, name, role, ref_code) VALUES ('leader@test.ru', $1, 'Лидер Siberian Wellness', 'leader', 'sw-leader') RETURNING id"
+      "INSERT INTO users (email, password_hash, name, role, ref_code) VALUES ('leader@test.ru', $1, 'Лидер Siberian Wellness', 'leader', 'sw-leader') RETURNING id",
+      [leaderHash]
     );
     const leaderId = leaderRes.rows[0].id;
 
+    // 3. Создаем Новичка
     await pool.query(
       "INSERT INTO users (email, password_hash, name, role, leader_id) VALUES ('student@test.ru', $1, 'Новичок Сетевого', 'student', $2)",
       [studentHash, leaderId]
