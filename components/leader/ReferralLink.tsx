@@ -1,51 +1,57 @@
-'use client';
-
-import { useState } from 'react';
+import React from 'react';
 
 interface ReferralLinkProps {
-  leaderId: number;
+  referralUrl: string;
 }
 
-export default function ReferralLink({ leaderId }: ReferralLinkProps) {
-  const [copied, setCopied] = useState(false);
-
-  const referralUrl = `${window.location.origin}/ref/${leaderId}`;
-
-  const handleCopy = async () => {
-    try {
-      await navigator.clipboard.writeText(referralUrl);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    } catch (err) {
-      console.error('Copy error:', err);
+export default function ReferralLink({ referralUrl }: ReferralLinkProps) {
+  const handleCopy = () => {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(referralUrl)
+        .then(() => alert('Ссылка успешно скопирована!'))
+        .catch(() => fallbackCopy(referralUrl));
+    } else {
+      fallbackCopy(referralUrl);
     }
   };
 
+  const fallbackCopy = (textToCopy: string) => {
+    const textArea = document.createElement("textarea");
+    textArea.value = textToCopy;
+    textArea.style.position = "fixed";
+    textArea.style.left = "-9999px";
+    textArea.style.top = "0px";
+    document.body.appendChild(textArea);
+    textArea.focus();
+    textArea.select();
+    
+    // Поддержка копирования для iPhone (iOS Safari)
+    textArea.setSelectionRange(0, 99999);
+    
+    try {
+      document.execCommand('copy');
+      alert('Ссылка успешно скопирована!');
+    } catch (err) {
+      alert('Не удалось скопировать. Пожалуйста, выделите и скопируйте ссылку вручную.');
+    }
+    document.body.removeChild(textArea);
+  };
+
   return (
-    <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-lg p-4 sm:p-5">
-      <div className="flex flex-col sm:flex-row sm:items-center gap-3">
-        <div className="flex-1 min-w-0">
-          <p className="text-sm font-semibold text-gray-800 mb-1">
-            🔗 Ваша реферальная ссылка
-          </p>
-          <p className="text-xs text-gray-900 mb-2">
-            Отправьте эту ссылку ученику для регистрации
-          </p>
-          <div className="bg-white rounded-lg px-3 py-2 border border-gray-200 overflow-x-auto">
-            <code className="text-xs sm:text-sm text-blue-600 whitespace-nowrap">
-              {referralUrl}
-            </code>
-          </div>
-        </div>
-        <button
+    <div className="p-4 bg-white rounded-lg shadow-sm border border-gray-100">
+      <h3 className="text-sm font-medium text-gray-500 mb-1">Ваша реферальная ссылка для новичков:</h3>
+      <div className="flex flex-col sm:flex-row gap-2 items-stretch sm:items-center">
+        <input 
+          type="text" 
+          readOnly 
+          value={referralUrl} 
+          className="flex-1 px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm text-gray-600 focus:outline-none"
+        />
+        <button 
           onClick={handleCopy}
-          className={`flex-shrink-0 px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 ${
-            copied
-              ? 'bg-green-500 text-white'
-              : 'bg-blue-500 hover:bg-blue-600 text-white'
-          }`}
+          className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white text-sm font-medium rounded-lg transition active:scale-95"
         >
-          {copied ? '✓ Скопировано!' : 'Копировать'}
+          📋 Копировать
         </button>
       </div>
     </div>
