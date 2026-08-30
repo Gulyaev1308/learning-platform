@@ -1,10 +1,15 @@
 import React from 'react';
 
 interface ReferralLinkProps {
-  referralUrl: string;
+  leaderId: number | string;
 }
 
-export default function ReferralLink({ referralUrl }: ReferralLinkProps) {
+export default function ReferralLink({ leaderId }: ReferralLinkProps) {
+  // Автоматически формируем правильную реферальную ссылку на основе ID лидера
+  const referralUrl = typeof window !== 'undefined' 
+    ? `${window.location.origin}/ref/${leaderId}`
+    : `http://89.232.177{leaderId}`;
+
   const handleCopy = () => {
     if (navigator.clipboard && navigator.clipboard.writeText) {
       navigator.clipboard.writeText(referralUrl)
@@ -25,14 +30,14 @@ export default function ReferralLink({ referralUrl }: ReferralLinkProps) {
     textArea.focus();
     textArea.select();
     
-    // Поддержка копирования для iPhone (iOS Safari)
+    // Поддержка копирования для iPhone / Safari устройств
     textArea.setSelectionRange(0, 99999);
     
     try {
       document.execCommand('copy');
       alert('Ссылка успешно скопирована!');
     } catch (err) {
-      alert('Не удалось скопировать. Пожалуйста, выделите и скопируйте ссылку вручную.');
+      alert('Не удалось скопировать автоматически. Скопируйте ссылку из поля вручную.');
     }
     document.body.removeChild(textArea);
   };
