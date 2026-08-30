@@ -18,7 +18,6 @@ export async function getCurrentUser() {
   const session = await getSession();
   if (!session) return null;
   
-  // Безопасность: Проверяем оба варианта ключа (userId или id), чтобы Postgres не получил undefined
   const targetId = session.userId || (session as any).id;
   if (!targetId) return null;
 
@@ -29,7 +28,6 @@ export async function getCurrentUser() {
 export async function createSession(sessionData: SessionData) {
   const cookieStore = await cookies();
   
-  // Магия совместимости: дублируем ID в оба формата, чтобы старый код сайта не ломался в Postgres
   const enrichedSession = {
     ...sessionData,
     userId: sessionData.userId || (sessionData as any).id,
@@ -38,7 +36,7 @@ export async function createSession(sessionData: SessionData) {
 
   cookieStore.set(SESSION_COOKIE, JSON.stringify(enrichedSession), {
     httpOnly: true,
-    secure: process.env.NODE_ENV === 'production',
+    secure: false, // Отключено для работы по http://89.232.177.229
     sameSite: 'lax',
     maxAge: 60 * 60 * 24 * 30, // 30 дней
     path: '/',
