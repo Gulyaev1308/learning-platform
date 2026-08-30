@@ -13,16 +13,22 @@ export async function GET(
       return NextResponse.json({ error: 'Доступ запрещен' }, { status: 403 });
     }
 
-    const { id: leaderId } = await params;
+    // Связываем уроки с модулями и блоками через JOIN для правильного отображения в админке
+    const lessonsResult = await db.query(`
+      SELECT 
+        l.*, 
+        m.title as module_title, 
+        m.block_id, 
+        b.title as block_title
+      FROM lessons l
+      INNER JOIN modules m ON m.id = l.module_id
+      INNER JOIN blocks b ON b.id = m.block_id
+      ORDER BY b.order_index ASC, m.order_index ASC, l.order_index ASC
+    `);
 
-    const lessons = (await db.query(`
-      SELECT * FROM lessons 
-      WHERE leader_id = $1 OR leader_id IS NULL
-      ORDER BY block, module, order_index
-    `, [leaderId])).rows as any[];
-
-    return NextResponse.json({ success: true, lessons });
+    return NextResponse.json({ success: true, lessons: lessonsResult.rows });
   } catch (error) {
+    console.error('Error fetching admin lessons:', error);
     return NextResponse.json({ error: 'Ошибка при получении уроков' }, { status: 500 });
   }
 }
