@@ -1,0 +1,31 @@
+version: '3.8'
+
+services:
+  # 1. База данных PostgreSQL (скрыта от интернета)
+  postgres-db:
+    image: postgres:15-alpine
+    container_name: learning-postgres
+    environment:
+      POSTGRES_USER: learning_admin
+      POSTGRES_PASSWORD: ${DB_PASSWORD} # Пароль безопасно подставится из GitHub Secrets
+      POSTGRES_DB: learning_platform_db
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+    restart: always
+
+  # 2. Твое Next.js приложение
+  nextjs-app:
+    build: .
+    container_name: learning-platform-app
+    ports:
+      - "80:3000" # Пробрасываем стандартный веб-порт сервера наружу
+    environment:
+      # Строка подключения к Postgres. Вместо IP пишем имя сервиса "postgres-db"
+      DATABASE_URL: "postgresql://learning_admin:${DB_PASSWORD}@postgres-db:5432/learning_platform_db?schema=public"
+      SESSION_SECRET: ${SESSION_SECRET}
+    restart: always
+    depends_on:
+      - postgres-db
+
+volumes:
+  pg_data: # Локальный диск на сервере Cloud.ru для хранения данных базы
