@@ -25,7 +25,8 @@ export default function LessonPage() {
         }
       } catch (err) {
         console.error(err);
-      } finaly {
+      } finally {
+        // ОПЕЧАТКА ИСПРАВЛЕНА: теперь тут строго 'finally' с двумя 'll'
         setLoading(false);
       }
     }
@@ -37,7 +38,6 @@ export default function LessonPage() {
 
   const isQuizAvailable = lesson.type !== 'video' || videoEnded;
 
-  // ИСПРАВЛЕННЫЙ ХАК ДЛЯ ПУТИ ВИДЕО: проверяем, зашит ли уже префикс в базе данных
   let videoSrc = '';
   if (lesson.content) {
     if (lesson.content.startsWith('/api/videos/') || lesson.content.startsWith('http')) {
@@ -68,7 +68,7 @@ export default function LessonPage() {
       {lesson.description && (
         <div className="bg-gray-50 p-5 rounded-xl border border-gray-200">
           <h2 className="text-base font-semibold text-gray-800 mb-2">Описание урока:</h2>
-          <p className="text-gray-600 leading-relaxed性能 whitespace-pre-wrap text-sm">{lesson.description}</p>
+          <p className="text-gray-600 leading-relaxed whitespace-pre-wrap text-sm">{lesson.description}</p>
         </div>
       )}
 
@@ -96,7 +96,7 @@ export default function LessonPage() {
                       </div>
                     )}
                     {quizContent.type === 'free_text' && (
-                      <textarea rows={3} placeholder="Введите ваш answer здесь..." className="w-full p-2 bg-white border border-gray-300 rounded-lg text-sm text-gray-800 focus:outline-none focus:border-blue-400" />
+                      <textarea rows={3} placeholder="Введите ваш ответ здесь..." className="w-full p-2 bg-white border border-gray-300 rounded-lg text-sm text-gray-800 focus:outline-none focus:border-blue-400" />
                     )}
                   </div>
                 ))}
