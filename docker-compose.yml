@@ -12,8 +12,14 @@ services:
     volumes:
       - pg_data:/var/lib/postgresql/data
     restart: always
+    # Добавляем проверку здоровья БД, чтобы Next.js не падал при старте
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U learning_admin -d learning_platform_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
 
-  # 2. Твое Next.js приложение
+  # 2. Ваше Next.js приложение
   nextjs-app:
     build: .
     container_name: learning-platform-app
@@ -24,17 +30,16 @@ services:
       SESSION_SECRET: "super-secret-padlock-key-for-iron-session-32"
       HOST: "0.0.0.0"
       PORT: 3000
-      # НАСТРОЙКА ЛОГИРОВАНИЯ: Принудительный вывод ошибок трейса Node.js в консоль Docker
       NODE_OPTIONS: "--trace-warnings --expose-gc"
-    # Настройка лог-драйвера, чтобы Docker сразу сбрасывал текст в буфер Linux
     logging:
       driver: "json-file"
       options:
         max-size: "10m"
         max-file: "3"
     restart: always
+    # Ждем, пока Postgres будет полностью ГОТОВ, а не просто запущен
     depends_on:
-      - postgres-db
-
-volumes:
-  pg_data:
+      postgres-db:
+        condition: service_healthy
+    # Выполняем миграции в изолированной оболочке перед стартом основного процесса server.js
+    command: sh -c "node database/init.js && node database/update-schema.js && node database/seed.js && node server.js"

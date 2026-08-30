@@ -27,5 +27,5 @@ ENV HOSTNAME="0.0.0.0"
 
 # ПОЛНАЯ АВТОМАТИЗАЦИЯ: Таблицы -> Пользователи -> Старт сайта
 # Полный автоматический цикл: Инициализация -> Обновление схемы -> Сидинг -> Старт сайта
-CMD ["sh", "-c", "node database/init.js && node database/update-schema.js && node database/seed.js && node server.js"]
+CMD ["node", "server.js"]
 
