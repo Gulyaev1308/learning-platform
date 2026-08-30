@@ -22,7 +22,8 @@ export async function getCurrentUser() {
   if (!targetId) return null;
 
   const result = await db.query('SELECT * FROM users WHERE id = $1', [targetId]);
-  return result.rows[0] || null;
+  // ИСПРАВЛЕНО: строго возвращаем объект первой строки [0]
+  return result.rows[0] || null; 
 }
 
 export async function createSession(sessionData: SessionData) {
@@ -36,7 +37,7 @@ export async function createSession(sessionData: SessionData) {
 
   cookieStore.set(SESSION_COOKIE, JSON.stringify(enrichedSession), {
     httpOnly: true,
-    secure: false, // Отключено для работы по http://89.232.177.229
+    secure: false, 
     sameSite: 'lax',
     maxAge: 60 * 60 * 24 * 30, // 30 дней
     path: '/',

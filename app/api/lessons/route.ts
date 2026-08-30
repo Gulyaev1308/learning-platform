@@ -10,26 +10,22 @@ export async function GET(request: NextRequest) {
   const user = userResult.rows[0];
   const leaderId = user?.role === 'student' ? user.leader_id : user?.id;
 
-  // Получаем все уроки по порядку
+  // ИСПРАВЛЕНО: заменены l.block_id/l.module_id на l.block/l.module в соответствии с init.js
   const allLessonsResult = await db.query(`
-    SELECT l.*, b.id as block_id, b.title as block_title, m.id as module_id, m.title as module_title
+    SELECT l.*, l.block as block_id, l.module as module_id
     FROM lessons l
-    LEFT JOIN blocks b ON b.id = l.block_id
-    LEFT JOIN modules m ON m.id = l.module_id
-    WHERE b.leader_id = $1 OR b.leader_id IS NULL
-    ORDER BY b.order_index, m.order_index, l.order_index, l.id
+    WHERE l.leader_id = $1 OR l.leader_id IS NULL
+    ORDER BY l.block, l.module, l.order_index, l.id
   `, [leaderId]);
 
   const allLessons = allLessonsResult.rows;
 
-  // Получаем завершенные уроки
   const progressResult = await db.query(
     'SELECT lesson_id FROM progress WHERE user_id = $1 AND status = $2',
     [session.userId, 'completed']
   );
   const completedIds = new Set(progressResult.rows.map(r => r.lesson_id));
 
-  // Определяем статус каждого урока (лестница)
   let previousCompleted = true;
   const lessonsWithStatus = allLessons.map((lesson, index) => {
     const isCompleted = completedIds.has(lesson.id);
@@ -41,17 +37,16 @@ export async function GET(request: NextRequest) {
     
     previousCompleted = isCompleted;
     
-    return { ...lesson, status };
+    return { ...lesson, status, block_title: `Блок ${lesson.block}`, module_title: `Модуль ${lesson.module}` };
   });
 
-  // Группируем по блокам и модулям
   const blocksMap = new Map();
   
   for (const lesson of lessonsWithStatus) {
     if (!blocksMap.has(lesson.block_id)) {
       blocksMap.set(lesson.block_id, {
         id: lesson.block_id,
-        title: lesson.block_title,
+        title: `Блок ${lesson.block_id}`,
         modules: new Map(),
       });
     }
@@ -61,7 +56,7 @@ export async function GET(request: NextRequest) {
     if (!block.modules.has(lesson.module_id)) {
       block.modules.set(lesson.module_id, {
         id: lesson.module_id,
-        title: lesson.module_title,
+        title: `Модуль ${lesson.module_id}`,
         lessons: [],
       });
     }
@@ -69,7 +64,6 @@ export async function GET(request: NextRequest) {
     block.modules.get(lesson.module_id).lessons.push(lesson);
   }
 
-  // Конвертируем в массив
   const result = [];
   for (const block of blocksMap.values()) {
     const modules = [];
