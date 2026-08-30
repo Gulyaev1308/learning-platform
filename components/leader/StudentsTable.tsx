@@ -1,7 +1,4 @@
-'use client';
-
-import { useState } from 'react';
-import { formatDate } from '@/lib/utils';
+import React from 'react';
 
 interface Student {
   id: number;
@@ -22,133 +19,71 @@ interface StudentsTableProps {
 export default function StudentsTable({ students, onViewAnswers }: StudentsTableProps) {
   if (students.length === 0) {
     return (
-      <div className="bg-white rounded-lg shadow-md p-8 text-center">
-        <p className="text-gray-900">У вас пока нет учеников</p>
+      <div className="bg-white rounded-xl p-8 text-center border border-gray-200">
+        <p className="text-gray-900 font-medium text-sm">У вас пока нет зарегистрированных учеников.</p>
       </div>
     );
   }
 
   return (
-    <>
-      {/* Мобильная версия - карточки */}
-      <div className="md:hidden space-y-4">
-        {students.map((student) => (
-          <div key={student.id} className="bg-white rounded-lg shadow-md p-4">
-            <div className="flex justify-between items-start mb-3">
-              <div>
-                <h3 className="font-semibold text-gray-900">{student.name}</h3>
-                <p className="text-sm text-gray-700">{student.email}</p>
-              </div>
-              <button
-                onClick={() => onViewAnswers(student.id)}
-                className="text-blue-600 hover:text-blue-900 text-sm font-medium"
-              >
-                Ответы
-              </button>
-            </div>
-
-            <div className="space-y-2">
-              <div>
-                <div className="flex justify-between text-sm mb-1">
-                  <span className="text-gray-900">Прогресс:</span>
-                  <span className="font-medium">{student.progress_percent}%</span>
-                </div>
-                <div className="w-full bg-gray-200 rounded-full h-2">
-                  <div
-                    className="bg-blue-500 h-2 rounded-full"
-                    style={{ width: `${student.progress_percent}%` }}
-                  />
-                </div>
-                <p className="text-xs text-gray-700 mt-1">
-                  {student.completed_lessons} из {student.total_lessons} уроков
-                </p>
-              </div>
-
-              <div className="text-sm">
-                <span className="text-gray-900">Последний урок: </span>
-                <span className="font-medium">{student.last_lesson || 'Не начал'}</span>
-              </div>
-
-              <div className="text-xs text-gray-600">
-                Ученик с {formatDate(student.created_at)}
-              </div>
-            </div>
-          </div>
-        ))}
-      </div>
-
-      {/* Десктопная версия - таблица */}
-      <div className="hidden md:block bg-white rounded-lg shadow-md overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="min-w-full divide-y divide-gray-200">
-            <thead className="bg-gray-50">
-              <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">
-                  Имя
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">
-                  Email
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">
-                  Прогресс
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">
-                  Последний урок
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">
-                  Действия
-                </th>
+    <div className="bg-white rounded-xl shadow-xs border border-gray-200 overflow-hidden">
+      <div className="overflow-x-auto">
+        <table className="min-w-full divide-y divide-gray-200">
+          <thead className="bg-gray-50">
+            <tr>
+              <th className="px-6 py-3 text-left text-xs font-bold text-gray-900 uppercase tracking-wider">Имя / Email</th>
+              <th className="px-6 py-3 text-left text-xs font-bold text-gray-900 uppercase tracking-wider">Дата регистрации</th>
+              <th className="px-6 py-3 text-left text-xs font-bold text-gray-900 uppercase tracking-wider">Прогресс обучения</th>
+              <th className="px-6 py-3 text-left text-xs font-bold text-gray-900 uppercase tracking-wider">Текущий / Последний урок</th>
+              <th className="px-6 py-3 text-right text-xs font-bold text-gray-900 uppercase tracking-wider">Действия</th>
+            </tr>
+          </thead>
+          <tbody className="bg-white divide-y divide-gray-200">
+            {students.map((student) => (
+              <tr key={student.id} className="hover:bg-gray-50/50 transition">
+                <td className="px-6 py-4 whitespace-nowrap">
+                  <div className="text-sm font-bold text-gray-900">{student.name}</div>
+                  <div className="text-xs font-medium text-gray-900/80">{student.email}</div>
+                </td>
+                <td className="px-6 py-4 whitespace-nowrap text-sm font-bold text-gray-900">
+                  {new Date(student.created_at).toLocaleDateString('ru-RU')}
+                </td>
+                <td className="px-6 py-4 whitespace-nowrap">
+                  <div className="flex items-center gap-3">
+                    {/* ИСПРАВЛЕНО: Проценты стали ультра-контрастными, глубокого синего цвета и жирными */}
+                    <span className="text-sm font-black text-blue-700 bg-blue-50 px-2 py-0.5 rounded border border-blue-200 min-w-[50px] text-center">
+                      {student.progress_percent || 0}%
+                    </span>
+                    <div className="w-24 sm:w-32 bg-gray-200 rounded-full h-2 overflow-hidden border border-gray-300">
+                      <div 
+                        className="bg-blue-600 h-full rounded-full transition-all duration-500" 
+                        style={{ width: `${student.progress_percent || 0}%` }}
+                      ></div>
+                    </div>
+                    <span className="text-xs font-bold text-gray-900">
+                      {student.completed_lessons}/{student.total_lessons}
+                    </span>
+                  </div>
+                </td>
+                <td className="px-6 py-4 whitespace-nowrap">
+                  {/* ИСПРАВЛЕНО: Последний ролик/урок стал глубокого черного цвета, без блеклости */}
+                  <div className="text-sm font-black text-gray-900 max-w-[200px] truncate">
+                    {student.last_lesson || '👉 Еще не приступал'}
+                  </div>
+                </td>
+                <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                  <button 
+                    onClick={() => onViewAnswers(student.id)}
+                    className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-lg transition active:scale-95 shadow-xs"
+                  >
+                    📊 Отчет и Оплата
+                  </button>
+                </td>
               </tr>
-            </thead>
-            <tbody className="bg-white divide-y divide-gray-200">
-              {students.map((student) => (
-                <tr key={student.id} className="hover:bg-gray-50">
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <div className="text-sm font-medium text-gray-900">
-                      {student.name}
-                    </div>
-                    <div className="text-xs text-gray-700">
-                      с {formatDate(student.created_at)}
-                    </div>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <div className="text-sm text-gray-900">{student.email}</div>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <div className="flex items-center">
-                      <div className="w-24 bg-gray-200 rounded-full h-2 mr-2">
-                        <div
-                          className="bg-blue-500 h-2 rounded-full"
-                          style={{ width: `${student.progress_percent}%` }}
-                        />
-                      </div>
-                      <span className="text-sm text-gray-700">
-                        {student.progress_percent}%
-                      </span>
-                    </div>
-                    <div className="text-xs text-gray-700 mt-1">
-                      {student.completed_lessons} из {student.total_lessons} уроков
-                    </div>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <div className="text-sm text-gray-900">
-                      {student.last_lesson || 'Не начал'}
-                    </div>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm">
-                    <button
-                      onClick={() => onViewAnswers(student.id)}
-                      className="text-blue-600 hover:text-blue-900 font-medium"
-                    >
-                      Ответы
-                    </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+            ))}
+          </tbody>
+        </table>
       </div>
-    </>
+    </div>
   );
 }

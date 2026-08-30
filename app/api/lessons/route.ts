@@ -13,7 +13,7 @@ export async function GET(request: NextRequest) {
     const user = userResult.rows[0];
     if (!user) return NextResponse.json({ error: 'Пользователь не найден' }, { status: 404 });
 
-    // Тянем контент
+    // Получаем весь контент
     const allLessonsResult = await db.query(`
       SELECT 
         l.*, 
@@ -28,7 +28,7 @@ export async function GET(request: NextRequest) {
       ORDER BY b.order_index ASC, m.order_index ASC, l.order_index ASC
     `);
 
-    // Проверяем одобрение лидера
+    // Проверяем одобрение платежей лидером
     const paymentsResult = await db.query(
       "SELECT block_id FROM premium_access WHERE user_id = $1 AND status = 'approved'",
       [currentUserId]
@@ -47,13 +47,12 @@ export async function GET(request: NextRequest) {
     
     const lessonsWithStatus = allLessons.map((lesson, index) => {
       const isCompleted = completedIds.has(lesson.id);
-      
       let status: string;
       
-      // ИСПРАВЛЕНО: Вместо 'locked' отдаем статус 'payment_required'. 
-      // Блок останется на экране, но будет заблокирован под замком!
+      // ИСПРАВЛЕНО: Возвращаем СТРОГО стандартный статус 'locked'.
+      // Никакой скрытый рантайм-кейс фронтенда больше не пропустит новичка на платный контент.
       if (lesson.block_is_premium && !approvedBlockIds.has(lesson.block_id)) {
-        status = 'payment_required'; 
+        status = 'locked'; 
       } else if (isCompleted) {
         status = 'completed';
       } else if (index === 0 || previousCompleted) {
@@ -62,7 +61,7 @@ export async function GET(request: NextRequest) {
         status = 'locked';
       }
       
-      // Если текущий блок требует оплаты, прерываем лестницу доступности дальше
+      // Намертво блокируем продвижение по «лестнице» вперед
       if (lesson.block_is_premium && !approvedBlockIds.has(lesson.block_id)) {
         previousCompleted = false;
       } else {
@@ -79,6 +78,8 @@ export async function GET(request: NextRequest) {
           id: lesson.block_id,
           title: lesson.block_title,
           is_premium: lesson.block_is_premium,
+          // Передаем флаг блокировки блока, чтобы фронтенд вывел его на экран, но с иконкой замочка
+          is_locked_by_payment: lesson.block_is_premium && !approvedBlockIds.has(lesson.block_id),
           modules: new Map(),
         });
       }
