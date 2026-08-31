@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import db from '@/lib/db';
 import { getSession } from '@/lib/auth';
 
+export const dynamic = 'force-dynamic';
+
 export async function GET(request: NextRequest) {
   try {
     const session = await getSession();
@@ -9,36 +11,25 @@ export async function GET(request: NextRequest) {
 
     const currentUserId = session.userId || (session as any).id;
 
-    // 1. Получаем данные студента
     const userResult = await db.query('SELECT * FROM users WHERE id = $1', [currentUserId]);
     const user = userResult.rows[0];
     if (!user) return NextResponse.json({ error: 'Пользователь не найден' }, { status: 404 });
 
-    // 2. Получаем всю структуру обучения (блоки, модули, уроки) по порядку
     const allLessonsResult = await db.query(`
-      SELECT 
-        l.*, 
-        b.id as block_id, 
-        b.title as block_title, 
-        b.is_premium as block_is_premium,
-        m.id as module_id, 
-        m.title as module_title
+      SELECT l.*, b.id as block_id, b.title as block_title, b.is_premium as block_is_premium,
+             m.id as module_id, m.title as module_title
       FROM lessons l
       INNER JOIN modules m ON m.id = l.module_id
       INNER JOIN blocks b ON b.id = m.block_id
       ORDER BY b.order_index ASC, m.order_index ASC, l.order_index ASC
     `);
 
-    // 3. Проверяем, какие платные блоки были ОДОБРЕНЫ лидером для этого студента
     const paymentsResult = await db.query(
       "SELECT block_id FROM premium_access WHERE user_id = $1 AND status = 'approved'",
       [currentUserId]
     );
     const approvedBlockIds = new Set(paymentsResult.rows.map(r => r.block_id));
 
-    const allLessons = allLessonsResult.rows;
-
-    // 4. Получаем список пройденных уроков
     const progressResult = await db.query(
       "SELECT lesson_id FROM progress WHERE user_id = $1 AND status = 'completed'",
       [currentUserId]
@@ -47,18 +38,15 @@ export async function GET(request: NextRequest) {
 
     let previousCompleted = true;
     
-    // 5. Просчитываем статусы строго по правилам вашей "лестницы"
-    const lessonsWithStatus = allLessons.map((lesson, index) => {
+    const lessonsWithStatus = allLessonsResult.rows.map((lesson, index) => {
       const isCompleted = completedIds.has(lesson.id);
       
-      // ИСПРАВЛЕНО: Жесткая проверка — если зашел СТУДЕНТ, а блок в СУБД отмечен как премиальный 
-      // (активирован флаг в админке) и лидер еще НЕ подтвердил оплату — блок блокируется намертво.
+      // Бронированная проверка платного блока для роли студента
       const isBlockLockedByPayment = user.role === 'student' && 
                                      Boolean(lesson.block_is_premium) === true && 
                                      !approvedBlockIds.has(lesson.block_id);
       
       let status: string;
-      
       if (isBlockLockedByPayment) {
         status = 'locked';
       } else if (isCompleted) {
@@ -69,7 +57,6 @@ export async function GET(request: NextRequest) {
         status = 'locked';
       }
       
-      // Блокируем продвижение по «лестнице» вперед
       if (isBlockLockedByPayment) {
         previousCompleted = false;
       } else {
@@ -79,7 +66,6 @@ export async function GET(request: NextRequest) {
       return { ...lesson, status };
     });
 
-    // Группируем уроки для сохранения исходной структуры фронтенда
     const blocksMap = new Map();
     for (const lesson of lessonsWithStatus) {
       if (!blocksMap.has(lesson.block_id)) {
@@ -87,6 +73,7 @@ export async function GET(request: NextRequest) {
           id: lesson.block_id,
           title: lesson.block_title,
           is_premium: lesson.block_is_premium,
+          is_locked: user.role === 'student' && lesson.block_is_premium && !approvedBlockIds.has(lesson.block_id),
           modules: new Map(),
         });
       }
@@ -99,28 +86,31 @@ export async function GET(request: NextRequest) {
           lessons: [],
         });
       }
-      
       block.modules.get(lesson.module_id).lessons.push(lesson);
     }
 
-    const result = [];
-    for (const block of blocksMap.values()) {
-      const modules = [];
-      for (const mod of block.modules.values()) {
-        modules.push(mod);
-      }
-      result.push({ ...block, modules });
-    }
+    const result = Array.from(blocksMap.values()).map(b => ({
+      ...b,
+      modules: Array.from(b.modules.values())
+    }));
 
-    return NextResponse.json({
-      success: true,
-      lessons: result,
-      totalLessons: allLessons.length,
-      completedLessons: completedIds.size,
-      progressPercent: allLessons.length > 0 ? Math.round((completedIds.size / allLessons.length) * 100) : 0,
-    });
+    return new NextResponse(
+      JSON.stringify({
+        success: true,
+        lessons: result,
+        totalLessons: allLessonsResult.rows.length,
+        completedLessons: completedIds.size,
+        progressPercent: allLessonsResult.rows.length > 0 ? Math.round((completedIds.size / allLessonsResult.rows.length) * 100) : 0,
+      }),
+      {
+        status: 200,
+        headers: {
+          'Content-Type': 'application/json',
+          'Cache-Control': 'no-store, no-cache, must-revalidate',
+        },
+      }
+    );
   } catch (error) {
-    console.error('Error in student lessons roadmap:', error);
-    return NextResponse.json({ error: 'Внутренняя ошибка сервера' }, { status: 500 });
+    return NextResponse.json({ error: 'Ошибка сервера' }, { status: 500 });
   }
 }
