@@ -52,10 +52,8 @@ export default function LessonPage() {
       }
 
       await fetch(`/api/lessons/${lessonId}/complete`, { method: 'POST' });
-
       alert('Урок успешно пройден!');
       router.push('/dashboard');
-      router.refresh();
     } catch (err) {
       alert('Ошибка при сохранении прогресса');
     } finally {
@@ -69,20 +67,13 @@ export default function LessonPage() {
   const hasVideo = lesson.type === 'video' && lesson.content;
   const isActionAvailable = !hasVideo || videoEnded;
 
-  // ИСПРАВЛЕННЫЙ АДАПТИВНЫЙ ПЛЕЕР: проверяем, что именно сохранено в базе данных
+  // НОРМАЛИЗАТОР ПУТИ: Очищает строку от дублирования api/videos
   let videoSrc = '';
   if (hasVideo) {
-    const rawContent = lesson.content.trim();
-    if (rawContent.startsWith('http://') || rawContent.startsWith('https://')) {
-      videoSrc = rawContent;
-    } else if (rawContent.startsWith('/api/videos/')) {
-      videoSrc = rawContent;
-    } else if (rawContent.startsWith('api/videos/')) {
-      videoSrc = `/${rawContent}`;
-    } else {
-      // Если в базе лежит просто "video_xxx.mp4"
-      videoSrc = `/api/videos/${rawContent}`;
-    }
+    let cleanContent = lesson.content.trim();
+    // Извлекаем только имя файла, убирая любые префиксы
+    const fileName = cleanContent.split('/').pop();
+    videoSrc = `/api/videos/${fileName}`;
   }
 
   return (
@@ -97,13 +88,7 @@ export default function LessonPage() {
         
         {hasVideo && videoSrc && (
           <div className="w-full bg-black rounded-2xl overflow-hidden shadow-2xl aspect-video max-h-[70vh] mx-auto">
-            <video 
-              src={videoSrc} 
-              controls 
-              controlsList="nodownload"
-              onEnded={() => setVideoEnded(true)}
-              className="w-full h-full object-contain"
-            />
+            <video src={videoSrc} controls controlsList="nodownload" onEnded={() => setVideoEnded(true)} className="w-full h-full object-contain" />
           </div>
         )}
 
@@ -147,12 +132,8 @@ export default function LessonPage() {
               </h2>
             )}
             
-            <button 
-              onClick={handleCompleteLesson}
-              disabled={!isActionAvailable || sending}
-              className="w-full sm:w-auto px-6 py-3 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-300 text-white font-semibold rounded-xl text-sm shadow-md transition-all active:scale-98"
-            >
-              {sending ? 'Сохранение...' : quizContent?.questions?.length > 0 ? '🚀 Отправить ответы и завершить урок' : '✅ Завершить урок и продолжить'}
+            <button onClick={handleCompleteLesson} disabled={!isActionAvailable || sending} className="w-full sm:w-auto px-6 py-3 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-300 text-white font-semibold rounded-xl text-sm shadow-md transition-all active:scale-98">
+              {sending ? 'Сохранение...' : quizContent?.questions?.length > 0 ? '🚀 Отправить ответы' : '✅ Завершить урок'}
             </button>
           </div>
         </div>

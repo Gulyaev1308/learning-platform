@@ -6,15 +6,13 @@ const pool = new Pool({
 });
 
 async function initDB() {
-  console.log('=== Инициализация базы данных PostgreSQL ===');
+  console.log('=== Инициализация базы данных PostgreSQL (Релиз MVP) ===');
   try {
-    console.log('🧹 Очистка старых таблиц...');
-    await pool.query('DROP TABLE IF EXISTS quiz_answers, progress, lessons, modules, blocks, premium_access, users CASCADE;');
-
     await pool.query('CREATE EXTENSION IF NOT EXISTS "uuid-ossp";');
 
+    // СТАНДАРТ: Создаем таблицы ТОЛЬКО если их нет. Существующие данные НЕ трогаем.
     await pool.query(`
-      CREATE TABLE users (
+      CREATE TABLE IF NOT EXISTS users (
         id SERIAL PRIMARY KEY,
         email VARCHAR(255) UNIQUE NOT NULL,
         password_hash VARCHAR(255) NOT NULL,
@@ -25,7 +23,7 @@ async function initDB() {
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       );
 
-      CREATE TABLE blocks (
+      CREATE TABLE IF NOT EXISTS blocks (
         id SERIAL PRIMARY KEY,
         leader_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
         title VARCHAR(255) NOT NULL,
@@ -35,7 +33,7 @@ async function initDB() {
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       );
 
-      CREATE TABLE modules (
+      CREATE TABLE IF NOT EXISTS modules (
         id SERIAL PRIMARY KEY,
         block_id INTEGER NOT NULL REFERENCES blocks(id) ON DELETE CASCADE,
         title VARCHAR(255) NOT NULL,
@@ -43,7 +41,7 @@ async function initDB() {
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       );
 
-      CREATE TABLE lessons (
+      CREATE TABLE IF NOT EXISTS lessons (
         id SERIAL PRIMARY KEY,
         module_id INTEGER NOT NULL REFERENCES modules(id) ON DELETE CASCADE,
         title VARCHAR(255) NOT NULL,
@@ -55,7 +53,7 @@ async function initDB() {
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       );
 
-      CREATE TABLE progress (
+      CREATE TABLE IF NOT EXISTS progress (
         id SERIAL PRIMARY KEY,
         user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
         lesson_id INTEGER NOT NULL REFERENCES lessons(id) ON DELETE CASCADE,
@@ -65,7 +63,7 @@ async function initDB() {
         UNIQUE(user_id, lesson_id)
       );
 
-      CREATE TABLE quiz_answers (
+      CREATE TABLE IF NOT EXISTS quiz_answers (
         id SERIAL PRIMARY KEY,
         user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
         lesson_id INTEGER NOT NULL REFERENCES lessons(id) ON DELETE CASCADE,
@@ -74,7 +72,7 @@ async function initDB() {
         UNIQUE(user_id, lesson_id)
       );
 
-      CREATE TABLE premium_access (
+      CREATE TABLE IF NOT EXISTS premium_access (
         id SERIAL PRIMARY KEY,
         user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
         block_id INTEGER NOT NULL REFERENCES blocks(id) ON DELETE CASCADE,
@@ -85,38 +83,43 @@ async function initDB() {
         UNIQUE(user_id, block_id)
       );
 
-      CREATE INDEX idx_users_leader ON users(leader_id);
-      CREATE INDEX idx_blocks_order ON blocks(order_index);
-      CREATE INDEX idx_modules_block ON modules(block_id);
-      CREATE INDEX idx_lessons_module ON lessons(module_id);
-      CREATE INDEX idx_progress_user ON progress(user_id);
-      CREATE INDEX idx_quiz_user ON quiz_answers(user_id);
+      CREATE INDEX IF NOT EXISTS idx_users_leader ON users(leader_id);
+      CREATE INDEX IF NOT EXISTS idx_blocks_order ON blocks(order_index);
+      CREATE INDEX IF NOT EXISTS idx_modules_block ON modules(block_id);
+      CREATE INDEX IF NOT EXISTS idx_lessons_module ON lessons(module_id);
+      CREATE INDEX IF NOT EXISTS idx_progress_user ON progress(user_id);
+      CREATE INDEX IF NOT EXISTS idx_quiz_user ON quiz_answers(user_id);
     `);
-    console.log('✅ Все новые таблицы, связи и индексы под MVP успешно созданы!');
+    console.log('✅ Структура базы данных проверена/создана.');
 
-    console.log('=== Заполнение эталонных профилей ===');
-    const salt = await bcrypt.genSalt(10);
-    const adminHash = await bcrypt.hash('admin123', salt);
-    const leaderHash = await bcrypt.hash('leader123', salt);
-    const studentHash = await bcrypt.hash('student123', salt);
+    // Сидинг дефолтных профилей запускается ТОЛЬКО если таблица пуста
+    const userCheck = await pool.query("SELECT id FROM users LIMIT 1");
+    if (userCheck.rows.length === 0) {
+      console.log('=== Заполнение эталонных профилей ===');
+      const salt = await bcrypt.genSalt(10);
+      const adminHash = await bcrypt.hash('admin123', salt);
+      const leaderHash = await bcrypt.hash('leader123', salt);
+      const studentHash = await bcrypt.hash('student123', salt);
 
-    await pool.query(
-      "INSERT INTO users (email, password_hash, name, role) VALUES ('admin@test.ru', $1, 'Главный Admin', 'admin')",
-      [adminHash]
-    );
+      await pool.query(
+        "INSERT INTO users (email, password_hash, name, role) VALUES ('admin@test.ru', $1, 'Главный Admin', 'admin')",
+        [adminHash]
+      );
 
-    const leaderRes = await pool.query(
-      "INSERT INTO users (email, password_hash, name, role, ref_code) VALUES ('leader@test.ru', $1, 'Лидер Siberian Wellness', 'leader', 'sw-leader') RETURNING id",
-      [leaderHash]
-    );
-    const leaderId = leaderRes.rows[0].id;
+      const leaderRes = await pool.query(
+        "INSERT INTO users (email, password_hash, name, role, ref_code) VALUES ('leader@test.ru', $1, 'Лидер Siberian Wellness', 'leader', 'sw-leader') RETURNING id",
+        [leaderHash]
+      );
+      const leaderId = leaderRes.rows.id;
 
-    await pool.query(
-      "INSERT INTO users (email, password_hash, name, role, leader_id) VALUES ('student@test.ru', $1, 'Новичок Сетевого', 'student', $2)",
-      [studentHash, leaderId]
-    );
-    
-    console.log('🚀 База данных успешно инициализирована эталонными профилями!');
+      await pool.query(
+        "INSERT INTO users (email, password_hash, name, role, leader_id) VALUES ('student@test.ru', $1, 'Новичок Сетевого', 'student', $2)",
+        [studentHash, leaderId]
+      );
+      console.log('🚀 База данных успешно инициализирована эталонными профилями!');
+    } else {
+      console.log('ℹ️ База данных содержит данные, сидинг пропущен.');
+    }
 
   } catch (error) {
     console.error('❌ Ошибка при инициализации таблиц:', error);

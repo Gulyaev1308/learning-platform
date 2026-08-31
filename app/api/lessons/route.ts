@@ -15,14 +15,22 @@ export async function GET(request: NextRequest) {
     const user = userResult.rows[0];
     if (!user) return NextResponse.json({ error: 'Пользователь не найден' }, { status: 404 });
 
+    const filterLeaderId = user.role === 'student' ? user.leader_id : user.id;
+
     const allLessonsResult = await db.query(`
-      SELECT l.*, b.id as block_id, b.title as block_title, b.is_premium as block_is_premium,
-             m.id as module_id, m.title as module_title
+      SELECT 
+        l.*, 
+        b.id as block_id, 
+        b.title as block_title, 
+        b.is_premium as block_is_premium,
+        m.id as module_id, 
+        m.title as module_title
       FROM lessons l
       INNER JOIN modules m ON m.id = l.module_id
       INNER JOIN blocks b ON b.id = m.block_id
+      WHERE b.leader_id = $1 OR b.leader_id IS NULL
       ORDER BY b.order_index ASC, m.order_index ASC, l.order_index ASC
-    `);
+    `, [filterLeaderId]);
 
     const paymentsResult = await db.query(
       "SELECT block_id FROM premium_access WHERE user_id = $1 AND status = 'approved'",
@@ -41,9 +49,9 @@ export async function GET(request: NextRequest) {
     const lessonsWithStatus = allLessonsResult.rows.map((lesson, index) => {
       const isCompleted = completedIds.has(lesson.id);
       
-      // Бронированная проверка платного блока для роли студента
+      // Бронированная проверка платного блока
       const isBlockLockedByPayment = user.role === 'student' && 
-                                     Boolean(lesson.block_is_premium) === true && 
+                                     lesson.block_is_premium === true && 
                                      !approvedBlockIds.has(lesson.block_id);
       
       let status: string;
@@ -73,7 +81,6 @@ export async function GET(request: NextRequest) {
           id: lesson.block_id,
           title: lesson.block_title,
           is_premium: lesson.block_is_premium,
-          is_locked: user.role === 'student' && lesson.block_is_premium && !approvedBlockIds.has(lesson.block_id),
           modules: new Map(),
         });
       }
@@ -91,26 +98,21 @@ export async function GET(request: NextRequest) {
 
     const result = Array.from(blocksMap.values()).map(b => ({
       ...b,
-      modules: Array.from(b.modules.values())
+      modules: Array.from(b.modules.values()).map((m: any) => ({
+        ...m,
+        lessons: m.lessons
+      }))
     }));
 
-    return new NextResponse(
-      JSON.stringify({
-        success: true,
-        lessons: result,
-        totalLessons: allLessonsResult.rows.length,
-        completedLessons: completedIds.size,
-        progressPercent: allLessonsResult.rows.length > 0 ? Math.round((completedIds.size / allLessonsResult.rows.length) * 100) : 0,
-      }),
-      {
-        status: 200,
-        headers: {
-          'Content-Type': 'application/json',
-          'Cache-Control': 'no-store, no-cache, must-revalidate',
-        },
-      }
-    );
+    return NextResponse.json({
+      success: true,
+      lessons: result,
+      totalLessons: allLessonsResult.rows.length,
+      completedLessons: completedIds.size,
+      progressPercent: allLessonsResult.rows.length > 0 ? Math.round((completedIds.size / allLessonsResult.rows.length) * 100) : 0,
+    });
   } catch (error) {
-    return NextResponse.json({ error: 'Ошибка сервера' }, { status: 500 });
+    console.error(error);
+    return NextResponse.json({ error: 'Внутренняя ошибка сервера' }, { status: 500 });
   }
 }
