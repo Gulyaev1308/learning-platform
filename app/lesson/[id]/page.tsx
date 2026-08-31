@@ -38,7 +38,6 @@ export default function LessonPage() {
     if (sending) return;
     setSending(true);
     try {
-      // Если есть опрос — отправляем ответы
       if (quizContent && quizContent.questions && quizContent.questions.length > 0) {
         const formattedAnswers = quizContent.questions.map((q: any, i: number) => ({
           question: q.text || q.question,
@@ -52,7 +51,6 @@ export default function LessonPage() {
         });
       }
 
-      // Фиксируем прохождение урока в прогрессбаре
       await fetch(`/api/lessons/${lessonId}/complete`, { method: 'POST' });
 
       alert('Урок успешно пройден!');
@@ -68,9 +66,24 @@ export default function LessonPage() {
   if (loading) return <div className="min-h-screen flex items-center justify-center text-gray-600">Загрузка...</div>;
   if (!lesson) return <div className="min-h-screen flex items-center justify-center text-red-500">Урок не найден</div>;
 
-  // ГИБКАЯ ЛОГИКА: если в уроке нет видеофайла — опрос/кнопка доступны сразу!
   const hasVideo = lesson.type === 'video' && lesson.content;
   const isActionAvailable = !hasVideo || videoEnded;
+
+  // ИСПРАВЛЕННЫЙ АДАПТИВНЫЙ ПЛЕЕР: проверяем, что именно сохранено в базе данных
+  let videoSrc = '';
+  if (hasVideo) {
+    const rawContent = lesson.content.trim();
+    if (rawContent.startsWith('http://') || rawContent.startsWith('https://')) {
+      videoSrc = rawContent;
+    } else if (rawContent.startsWith('/api/videos/')) {
+      videoSrc = rawContent;
+    } else if (rawContent.startsWith('api/videos/')) {
+      videoSrc = `/${rawContent}`;
+    } else {
+      // Если в базе лежит просто "video_xxx.mp4"
+      videoSrc = `/api/videos/${rawContent}`;
+    }
+  }
 
   return (
     <div className="min-h-screen w-full bg-white text-gray-900 p-4 sm:p-6 lg:p-8">
@@ -82,10 +95,10 @@ export default function LessonPage() {
           </button>
         </div>
         
-        {hasVideo && (
+        {hasVideo && videoSrc && (
           <div className="w-full bg-black rounded-2xl overflow-hidden shadow-2xl aspect-video max-h-[70vh] mx-auto">
             <video 
-              src={lesson.content.startsWith('http') ? lesson.content : `/api/videos/${lesson.content}`} 
+              src={videoSrc} 
               controls 
               controlsList="nodownload"
               onEnded={() => setVideoEnded(true)}
@@ -101,7 +114,6 @@ export default function LessonPage() {
           </div>
         )}
 
-        {/* ЭЛЕМЕНТ ОПРОСА ИЛИ ПРОСТО КНОПКА ЗАВЕРШЕНИЯ УРОКА */}
         <div className={`transition-all duration-300 ${isActionAvailable ? 'opacity-100' : 'opacity-40 pointer-events-none'}`}>
           <div className="bg-blue-50 p-6 rounded-2xl border border-blue-100 space-y-4">
             {quizContent && quizContent.questions && quizContent.questions.length > 0 ? (
