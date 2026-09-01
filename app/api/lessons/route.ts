@@ -22,7 +22,7 @@ export async function GET(request: NextRequest) {
       console.log('❌ [AUDIT] Юзер не найден в таблице users');
       return NextResponse.json({ error: 'Пользователь не найден' }, { status: 404 });
     }
-    const user = userResult.rows[0];
+    const user = userResult.rows[0]; // Исправлено: берем первый элемент массива rows
     console.log(`🔍 [AUDIT] Данные из БД -> ID: ${user.id}, Имя: ${user.name}, Роль в БД: ${user.role}, Лидер: ${user.leader_id}`);
 
     const filterLeaderId = user.role === 'student' ? user.leader_id : user.id;
