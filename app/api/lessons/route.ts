@@ -64,14 +64,20 @@ export async function GET(request: NextRequest) {
 
     let previousCompleted = true;
     
-    // 5. Расчет лестницы с логированием условий
+    // 5. Расчет лестницы с исправленной логикой приведения типов и защиты от сквозного прохода
     const lessonsWithStatus = allLessonsResult.rows.map((lesson, index) => {
       const isCompleted = completedIds.has(lesson.lesson_id);
       
-      // Вычисляем жесткое условие блокировки
-      const isPremiumFlagInDB = lesson.block_is_premium === true || lesson.block_is_premium === 'true';
+      // Надежное приведение флага премиумности из БД к логическому типу
+      const isPremiumFlagInDB = 
+        lesson.block_is_premium === true || 
+        lesson.block_is_premium === 'true' ||
+        lesson.block_is_premium === 1 ||
+        lesson.block_is_premium === '1';
+
       const hasLeaderApproved = approvedBlockIds.has(lesson.block_id);
       
+      // Блокировка срабатывает, если пользователь — студент, блок платный, а лидер еще не подтвердил доступ
       const isBlockLockedByPayment = user.role === 'student' && isPremiumFlagInDB && !hasLeaderApproved;
 
       let status: string;
@@ -79,7 +85,7 @@ export async function GET(request: NextRequest) {
         status = 'locked';
       } else if (isCompleted) {
         status = 'completed';
-      } else if (index === 0 || previousCompleted) {
+      } else if ((index === 0 || previousCompleted) && !isBlockLockedByPayment) {
         status = 'available';
       } else {
         status = 'locked';
@@ -87,15 +93,17 @@ export async function GET(request: NextRequest) {
 
       console.log(
         `📈 [AUDIT LOGIC] Урок: "${lesson.lesson_title}" (Блок: "${lesson.block_title}") -> ` +
-        `Премиум в БД: ${lesson.block_is_premium} (${typeof lesson.block_is_premium}), ` +
+        `Премиум в БД (сырой): ${lesson.block_is_premium}, ` +
+        `Распознан как Премиум: ${isPremiumFlagInDB}, ` +
         `Одобрен Лидером: ${hasLeaderApproved}, ` +
         `Блокировать по оплате: ${isBlockLockedByPayment} -> ИТОГОВЫЙ СТАТУС: ${status}`
       );
       
-      if (isBlockLockedByPayment) {
+      // Если текущий шаг заблокирован по оплате или сам урок не пройден — прерываем цепочку доступности
+      if (isBlockLockedByPayment || !isCompleted) {
         previousCompleted = false;
       } else {
-        previousCompleted = isCompleted;
+        previousCompleted = true;
       }
 
       return {
@@ -106,7 +114,7 @@ export async function GET(request: NextRequest) {
         order_index: lesson.lesson_order,
         block_id: lesson.block_id,
         block_title: lesson.block_title,
-        block_is_premium: lesson.block_is_premium,
+        block_is_premium: isPremiumFlagInDB,
         module_title: lesson.module_title,
         status: status
       };
