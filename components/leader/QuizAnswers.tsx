@@ -10,11 +10,27 @@ interface QuizAnswersProps {
 export default function QuizAnswers({ student, stats, answers, onClose }: QuizAnswersProps) {
   const [verifying, setVerifying] = useState(false);
 
-  // Динамически ищем первый заблокированный платный блок среди ответов или структуры данных
-  // Если у нас в answers есть информация о заблокированном блоке, берем его, иначе по умолчанию Блок 2
-  const currentLockedBlockId = answers.find(r => r.status === 'locked' || r.block_is_premium)?.block_id || 2;
-  const currentLockedBlockTitle = answers.find(r => r.status === 'locked' || r.block_is_premium)?.block_title || `Блок ${currentLockedBlockId}`;
+  // 1. Исключаем из анализа все уроки, которые студент УЖЕ успешно прошел
+  const uncompletedLessons = answers.filter(row => {
+    return row.status !== 'completed';
+  });
 
+  // 2. Среди оставшихся (невыполненных) уроков ищем самый первый платный блок
+  const currentLockedBlock = uncompletedLessons.find(row => {
+    const isPremium = 
+      row.block_is_premium === true || 
+      row.block_is_premium === 'true' || 
+      row.block_is_premium === 1 ||
+      String(row.block_title).toLowerCase().includes('платный');
+      
+    return isPremium || row.status === 'locked';
+  });
+
+  // 3. Динамически подставляем ID и Имя блока для MVP без хардкода
+  const currentLockedBlockId = currentLockedBlock ? currentLockedBlock.block_id : 2;
+  const currentLockedBlockTitle = currentLockedBlock ? currentLockedBlock.block_title : "Платный блок";
+
+  // Функция для ручного открытия платного блока лидеру
   const handleVerifyPayment = async (blockId: number, action: 'approved' | 'rejected') => {
     setVerifying(true);
     try {
@@ -46,28 +62,28 @@ export default function QuizAnswers({ student, stats, answers, onClose }: QuizAn
           <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-lg">✕</button>
         </div>
 
-        {/* ДИНАМИЧЕСКИЙ КОНТРОЛЬ ДОСТУПА ПО ID БЛОКА */}
+        {/* ДИНАМИЧЕСКИЙ КОНТРОЛЬ ДОСТУПА ПО ТЕКУЩЕМУ БЛОКУ */}
         <div className="p-4 bg-amber-50 border border-amber-200 rounded-xl space-y-3">
           <h4 className="text-sm font-bold text-amber-900 flex items-center gap-2">
-            🔑 Контроль платного доступа: <span className="underline">{currentLockedBlockTitle}</span>
+            🔑 Контроль платного доступа: <span className="underline font-extrabold">{currentLockedBlockTitle}</span>
           </h4>
           <p className="text-xs text-amber-700">
-            Если новичок перевел вам оплату, подтвердите участие для открытия этого этапа обучения:
+            Если новичок перевел вам оплату на карту, подтвердите его участие для открытия этого этапа обучения:
           </p>
           <div className="flex gap-2">
             <button 
               disabled={verifying} 
               onClick={() => handleVerifyPayment(currentLockedBlockId, 'approved')} 
-              className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg text-xs font-bold transition"
+              className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg text-xs font-bold transition disabled:opacity-50"
             >
               Открыть доступ (Оплата получена)
             </button>
             <button 
               disabled={verifying} 
               onClick={() => handleVerifyPayment(currentLockedBlockId, 'rejected')} 
-              className="px-4 py-2 bg-red-100 hover:bg-red-200 text-red-700 rounded-lg text-xs font-bold transition"
+              className="px-4 py-2 bg-red-100 hover:bg-red-200 text-red-700 rounded-lg text-xs font-bold transition disabled:opacity-50"
             >
-              Ограничить доступ
+              Закрыть доступ
             </button>
           </div>
         </div>
