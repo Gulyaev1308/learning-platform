@@ -1,3 +1,4 @@
+import { revalidatePath } from 'next/cache';
 import { NextRequest, NextResponse } from 'next/server';
 import db from '@/lib/db';
 import { getSession } from '@/lib/auth';
@@ -23,6 +24,8 @@ export async function POST(request: NextRequest) {
       DO UPDATE SET status = $3, approved_by = $4, updated_at = CURRENT_TIMESTAMP
     `, [student_id, block_id, action, currentLeaderId]);
 
+    revalidatePath('/dashboard');
+    revalidatePath('/api/lessons');
     return NextResponse.json({ success: true });
   } catch (error) {
     console.error('Payment verification error:', error);

@@ -140,6 +140,12 @@ export async function GET(request: NextRequest) {
       totalLessons: allLessonsResult.rows.length,
       completedLessons: completedIds.size,
       progressPercent: allLessonsResult.rows.length > 0 ? Math.round((completedIds.size / allLessonsResult.rows.length) * 100) : 0,
+    }, {
+      headers: {
+        'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
+        'Pragma': 'no-cache',
+        'Expires': '0'
+      }
     });
   } catch (error) {
     console.error('❌ Критическая ошибка роута:', error);
