@@ -15,11 +15,13 @@ export async function GET(request: NextRequest) {
 
     const currentUserId = session.userId || (session as any).id;
     const userResult = await db.query('SELECT id, email, name, role, leader_id FROM users WHERE id = $1', [currentUserId]);
-
+    
     if (userResult.rows.length === 0) {
       return NextResponse.json({ error: 'Пользователь не найден' }, { status: 404 });
     }
-    const user = userResult.rows[0];
+    
+    // ИСПРАВЛЕНО: Добавлен индекс [0]
+    const user = userResult.rows[0]; 
     const filterLeaderId = user.role === 'student' ? user.leader_id : user.id;
 
     const allLessonsResult = await db.query(`
@@ -38,29 +40,30 @@ export async function GET(request: NextRequest) {
       "SELECT block_id, status FROM premium_access WHERE user_id = $1",
       [currentUserId]
     );
-
+    
     const approvedBlockIds = new Set(
       paymentsResult.rows.filter(r => r.status === 'approved').map(r => r.block_id)
     );
 
+    // ИСПРАВЛЕНО: Возвращен параметр [currentUserId]
     const progressResult = await db.query(
-      "SELECT lesson_id FROM progress WHERE user_id = $1 AND status = 'completed'"
+      "SELECT lesson_id FROM progress WHERE user_id = $1 AND status = 'completed'",
+      [currentUserId]
     );
     const completedIds = new Set(progressResult.rows.map(r => r.lesson_id));
 
     let previousCompleted = true;
     let firstBlockId: number | null = null;
-
+    
     const lessonsWithStatus = allLessonsResult.rows.map((lesson, index) => {
       const isCompleted = completedIds.has(lesson.lesson_id);
-
+      
       if (index === 0) {
         firstBlockId = lesson.block_id;
       }
 
-      // ПРИНУДИТЕЛЬНОЕ ОПРЕДЕЛЕНИЕ ПЛАТНОГО БЛОКА: по названию или если блок не первый
-      const isPremiumFlagInDB =
-        lesson.block_id !== firstBlockId ||
+      const isPremiumFlagInDB = 
+        lesson.block_id !== firstBlockId || 
         String(lesson.block_title).toLowerCase().includes('платный');
 
       const hasLeaderApproved = approvedBlockIds.has(lesson.block_id);
@@ -107,7 +110,7 @@ export async function GET(request: NextRequest) {
           modules: new Map(),
         });
       }
-
+      
       const block = blocksMap.get(lesson.block_id);
       if (!block.modules.has(lesson.module_id)) {
         block.modules.set(lesson.module_id, {
