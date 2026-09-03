@@ -50,7 +50,6 @@ export default function StudentsTable({ students, onViewAnswers }: StudentsTable
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap">
                   <div className="flex items-center gap-3">
-                    {/* ИСПРАВЛЕНО: Проценты стали ультра-контрастными, глубокого синего цвета и жирными */}
                     <span className="text-sm font-black text-blue-700 bg-blue-50 px-2 py-0.5 rounded border border-blue-200 min-w-[50px] text-center">
                       {student.progress_percent || 0}%
                     </span>
@@ -66,17 +65,17 @@ export default function StudentsTable({ students, onViewAnswers }: StudentsTable
                   </div>
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap">
-                  {/* ИСПРАВЛЕНО: Последний ролик/урок стал глубокого черного цвета, без блеклости */}
                   <div className="text-sm font-black text-gray-900 max-w-[200px] truncate">
                     {student.last_lesson || '👉 Еще не приступал'}
                   </div>
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                  {/* ИСПРАВЛЕНО: Изменен текст кнопки, чтобы не путать лидера, но сохранен обработчик onClick */}
                   <button 
                     onClick={() => onViewAnswers(student.id)}
                     className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-lg transition active:scale-95 shadow-xs"
                   >
-                    📊 Отчет и Оплата
+                    📊 Посмотреть отчет
                   </button>
                 </td>
               </tr>
