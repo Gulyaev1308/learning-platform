@@ -41,7 +41,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     };
 
     // 4. ДИНАМИЧЕСКИЙ РАСЧЕТ ТЕКУЩЕЙ БЛОКИРОВКИ ДЛЯ МОДАЛКИ ЛИДЕРА
-    const currentLeaderId = session.userId || session.id;
+    const currentLeaderId = session.userId || (session as any).id;
     
     // Получаем всю структуру обучения для анализа лестницы
     const courseStructureResult = await db.query(`
