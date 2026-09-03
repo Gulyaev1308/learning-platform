@@ -42,8 +42,8 @@ export default function QuizAnswers({ student, stats, answers, onClose }: QuizAn
           <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-lg">✕</button>
         </div>
 
-        {/* УПРАВЛЕНИЕ ДОСТУПОМ К ПЛАТНОМУ БЛОКУ 2 */}
-        <div className="p-4 bg-amber-50 border border-amber-200 rounded-xl space-y-3">
+        {/* УПРАВЛЕНИЕ ДОСТУПОМ К ПЛАТНОМУ БЛОКУ 2 (ИСПРАВЛЕНО: Безопасно скрыто через className="hidden") */}
+        <div className="hidden p-4 bg-amber-50 border border-amber-200 rounded-xl space-y-3">
           <h4 className="text-sm font-bold text-amber-900 flex items-center gap-2">🔑 Контроль платного доступа (Блок 2)</h4>
           <p className="text-xs text-amber-700">Если новичок перевел вам оплату на карту, подтвердите его участие для открытия «лестницы» обучения:</p>
           <div className="flex gap-2">
