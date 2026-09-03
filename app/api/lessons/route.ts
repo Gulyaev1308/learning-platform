@@ -23,7 +23,7 @@ export async function GET(request: NextRequest) {
     const user = userResult.rows[0]; 
     const filterLeaderId = user.role === 'student' ? user.leader_id : user.id;
 
-    // 1. Получаем абсолютно все уроки, доступные через лидера
+    // 1. Запрашиваем всю структуру обучения
     const allLessonsResult = await db.query(`
       SELECT 
         l.id as lesson_id, l.title as lesson_title, l.type as lesson_type, l.order_index as lesson_order,
@@ -36,7 +36,7 @@ export async function GET(request: NextRequest) {
       ORDER BY b.order_index ASC, m.order_index ASC, l.order_index ASC
     `, [filterLeaderId]);
 
-    // 2. Получаем одобренные платежи
+    // 2. Вытягиваем ОДОБРЕННЫЕ платежи для текущего пользователя
     const paymentsResult = await db.query(
       "SELECT block_id, status FROM premium_access WHERE user_id = $1",
       [currentUserId]
@@ -53,47 +53,41 @@ export async function GET(request: NextRequest) {
     );
     const completedIds = new Set(progressResult.rows.map(r => r.lesson_id));
 
-    let firstBlockId: number | null = null;
-    if (allLessonsResult.rows.length > 0) {
-      firstBlockId = allLessonsResult.rows[0].block_id;
-    }
-
     let foundFirstUncompleted = false;
     
-    // 4. Расчет статусов уроков
+    // 4. Динамический расчет статусов уроков для неограниченного числа блоков
     const lessonsWithStatus = allLessonsResult.rows.map((lesson, index) => {
       const isCompleted = completedIds.has(lesson.lesson_id);
       
-      // Блок платный, если он не первый ИЛИ в его названии есть слово "платный"
+      // Блок признается премиумным динамически по флагу из БД или по вхождению слова в название
       const isPremiumBlock = 
-        lesson.block_id !== firstBlockId || 
+        lesson.block_is_premium === true || 
+        lesson.block_is_premium === 'true' ||
+        lesson.block_is_premium === 1 ||
         String(lesson.block_title).toLowerCase().includes('платный');
 
+      // Динамическая проверка аппрува именно для текущего block_id
       const hasLeaderApproved = approvedBlockIds.has(lesson.block_id);
       
-      // Жесткая блокировка по оплате: ТОЛЬКО если урок НЕ пройден, а блок платный и нет аппрува
+      // Блокируем только непройденные уроки в платных блоках без аппрува
       const isLockedByPayment = user.role === 'student' && isPremiumBlock && !hasLeaderApproved && !isCompleted;
 
       let status: string;
 
       if (isCompleted) {
-        // УЖЕ ПРОЙДЕННЫЕ уроки всегда остаются открытыми для повторения
         status = 'completed';
       } else if (isLockedByPayment) {
-        // Заблокировано лидером
         status = 'locked';
       } else if (!foundFirstUncompleted) {
-        // Первый еще не пройденный урок в доступном блоке становится активным
         status = 'available';
         foundFirstUncompleted = true;
       } else {
-        // Все последующие невыполненные уроки ждут своей очереди по «лестнице»
         status = 'locked';
       }
 
       console.log(
-        `🛡️ [LOCK AUDIT] Урок: "${lesson.lesson_title}" (Блок: "${lesson.block_title}") -> ` +
-        `Пройден: ${isCompleted}, Премиум: ${isPremiumBlock}, Аппрув: ${hasLeaderApproved} -> СТАТУС: ${status}`
+        `🛡️ [LOCK AUDIT] Урок: "${lesson.lesson_title}" (Блок ID: ${lesson.block_id}) -> ` +
+        `Пройден: ${isCompleted}, Премиум: ${isPremiumBlock}, Аппрув: ${hasLeaderApproved} -> ИТОГОВЫЙ СТАТУС: ${status}`
       );
 
       return {
@@ -110,7 +104,7 @@ export async function GET(request: NextRequest) {
       };
     });
 
-    // 5. Группировка структуры для фронтенда (остается без изменений)
+    // 5. Группировка структуры
     const blocksMap = new Map();
     for (const lesson of lessonsWithStatus) {
       if (!blocksMap.has(lesson.block_id)) {
@@ -138,6 +132,7 @@ export async function GET(request: NextRequest) {
       modules: Array.from(b.modules.values())
     }));
 
+    console.log('=== [AUDIT] ЗАПРОС УСПЕШНО ОБРАБОТАН И ОТПРАВЛЕН ===');
     return NextResponse.json({
       success: true,
       lessons: result,
