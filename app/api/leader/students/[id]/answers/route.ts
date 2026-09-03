@@ -40,10 +40,69 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
       completion_percent: answers.length > 0 ? 100 : 0
     };
 
-    // ИСПРАВЛЕНО: Возвращаем полную структуру данных QuizAnswersData для фронтенда
+    // 4. ДИНАМИЧЕСКИЙ РАСЧЕТ ТЕКУЩЕЙ БЛОКИРОВКИ ДЛЯ МОДАЛКИ ЛИДЕРА
+    const currentLeaderId = session.userId || session.id;
+    
+    // Получаем всю структуру обучения для анализа лестницы
+    const courseStructureResult = await db.query(`
+      SELECT 
+        l.id as lesson_id, l.title as lesson_title,
+        b.id as block_id, b.title as block_title, b.is_premium as block_is_premium
+      FROM lessons l
+      INNER JOIN modules m ON m.id = l.module_id
+      INNER JOIN blocks b ON b.id = m.block_id
+      WHERE b.leader_id = $1 OR b.leader_id IS NULL
+      ORDER BY b.order_index ASC, m.order_index ASC, l.order_index ASC
+    `, [currentLeaderId]);
+
+    const allLessons = courseStructureResult.rows;
+
+    // Вытягиваем пройденные уроки именно этого студента
+    const progressRes = await db.query(
+      "SELECT lesson_id FROM progress WHERE user_id = $1 AND status = 'completed'",
+      [studentId]
+    );
+    const completedIds = new Set(progressRes.rows.map(r => r.lesson_id));
+
+    // Вытягиваем уже одобренные доступы этого студента
+    const paymentsRes = await db.query(
+      "SELECT block_id FROM premium_access WHERE user_id = $1 AND status = 'approved'",
+      [studentId]
+    );
+    const approvedBlockIds = new Set(paymentsRes.rows.map(r => Number(r.block_id)));
+
+    let currentLockedBlockId = null;
+    let currentLockedBlockTitle = null;
+
+    // Бежим по лестнице уроков и ищем первый непройденный заблокированный платный блок
+    for (const lesson of allLessons) {
+      const isCompleted = completedIds.has(lesson.lesson_id);
+      const isPremiumBlock = 
+        lesson.block_is_premium === true || 
+        lesson.block_is_premium === 'true' || 
+        lesson.block_is_premium === 1 || 
+        String(lesson.block_title).toLowerCase().includes('платный');
+      
+      const hasLeaderApproved = approvedBlockIds.has(Number(lesson.block_id));
+
+      if (!isCompleted) {
+        if (isPremiumBlock && !hasLeaderApproved) {
+          currentLockedBlockId = Number(lesson.block_id);
+          currentLockedBlockTitle = lesson.block_title;
+          break;
+        }
+      }
+    }
+
+    const richStudentObj = {
+      ...studentObj,
+      current_locked_block_id: currentLockedBlockId,
+      current_locked_block_title: currentLockedBlockTitle
+    };
+
     return NextResponse.json({ 
       success: true, 
-      student: studentObj, 
+      student: richStudentObj, 
       stats: statsObj,
       answers: answers 
     });
