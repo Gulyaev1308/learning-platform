@@ -101,7 +101,7 @@ export async function GET(request: NextRequest) {
           
           const hasLeaderApproved = approvedBlockIds.has(Number(lesson.block_id));
 
-          if (!isCompleted && !foundFirstUncompleted) {
+          if (!isCompleted) {
             foundFirstUncompleted = true;
             // Если студент уперся в платный блок, который еще не одобрен лидером
             if (isPremiumBlock && !hasLeaderApproved) {
