@@ -8,7 +8,7 @@ const pool = new Pool({
 async function createAdmin() {
   console.log('=== Создание администратора PostgreSQL ===');
   try {
-    const passwordHash = await bcrypt.hash('admin123', 10);
+    const passwordHash = await bcrypt.hash('ADmin20261308))', 10);
     
     await pool.query(`
       INSERT INTO users (email, password_hash, name, role)
