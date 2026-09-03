@@ -42,8 +42,8 @@ export default function QuizAnswers({ student, stats, answers, onClose }: QuizAn
           <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-lg">✕</button>
         </div>
 
-        {/* УПРАВЛЕНИЕ ДОСТУПОМ К ПЛАТНОМУ БЛОКУ 2 (ИСПРАВЛЕНО: Безопасно скрыто через className="hidden") */}
-        <div className="hidden p-4 bg-amber-50 border border-amber-200 rounded-xl space-y-3">
+        {/* УПРАВЛЕНИЕ ДОСТУПОМ К ПЛАТНОМУ БЛОКУ 2 (ИСПРАВЛЕНО: Блок снова активен и отображается) */}
+        <div className="p-4 bg-amber-50 border border-amber-200 rounded-xl space-y-3">
           <h4 className="text-sm font-bold text-amber-900 flex items-center gap-2">🔑 Контроль платного доступа (Блок 2)</h4>
           <p className="text-xs text-amber-700">Если новичок перевел вам оплату на карту, подтвердите его участие для открытия «лестницы» обучения:</p>
           <div className="flex gap-2">
@@ -56,14 +56,13 @@ export default function QuizAnswers({ student, stats, answers, onClose }: QuizAn
           </div>
         </div>
 
-        {/* ВЫВОД РЕЗУЛЬТАТОВ ОПРОСОВ (ИСПРАВЛЕНО: Распаковываем массив ответов JSONB) */}
+        {/* ВЫВОД РЕЗУЛЬТАТОВ ОПРОСОВ (Распаковываем массив ответов JSONB) */}
         <div className="space-y-4">
           <h4 className="font-bold text-sm text-gray-700 border-b border-gray-100 pb-2">📊 Результаты заполненных анкет:</h4>
           {answers.length === 0 ? (
             <p className="text-sm text-gray-500 text-center py-4">Студент еще не отправлял ответы на тесты.</p>
           ) : (
             answers.map((row: any, idx: number) => {
-              // Деструктуризируем или парсим answers из JSONB
               const itemAnswers = typeof row.answers === 'string' ? JSON.parse(row.answers) : (row.answers?.answers || row.answers || []);
               return (
                 <div key={idx} className="p-4 bg-gray-50 border border-gray-200 rounded-xl space-y-2">
