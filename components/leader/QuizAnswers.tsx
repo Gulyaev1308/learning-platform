@@ -1,7 +1,13 @@
 import React, { useState } from 'react';
 
 interface QuizAnswersProps {
-  student: { id: number; name: string; email: string };
+  student: { 
+    id: number; 
+    name: string; 
+    email: string;
+    current_locked_block_id?: number | null;
+    current_locked_block_title?: string | null;
+  };
   stats: any;
   answers: any[];
   onClose: () => void;
@@ -10,27 +16,11 @@ interface QuizAnswersProps {
 export default function QuizAnswers({ student, stats, answers, onClose }: QuizAnswersProps) {
   const [verifying, setVerifying] = useState(false);
 
-  // 1. Исключаем из анализа все уроки, которые студент УЖЕ успешно прошел
-  const uncompletedLessons = answers.filter(row => {
-    return row.status !== 'completed';
-  });
+  // Считываем точные данные, которые бэкенд динамически определил по лестнице прогресса
+  const hasLock = student.current_locked_block_id !== undefined && student.current_locked_block_id !== null;
+  const currentLockedBlockId = hasLock ? Number(student.current_locked_block_id) : null;
+  const currentLockedBlockTitle = hasLock ? student.current_locked_block_title : null;
 
-  // 2. Среди оставшихся (невыполненных) уроков ищем самый первый платный блок
-  const currentLockedBlock = uncompletedLessons.find(row => {
-    const isPremium = 
-      row.block_is_premium === true || 
-      row.block_is_premium === 'true' || 
-      row.block_is_premium === 1 ||
-      String(row.block_title).toLowerCase().includes('платный');
-      
-    return isPremium || row.status === 'locked';
-  });
-
-  // 3. Динамически подставляем ID и Имя блока (ИСПРАВЛЕНО: Принудительный Number)
-  const currentLockedBlockId = currentLockedBlock ? Number(currentLockedBlock.block_id) : 2;
-  const currentLockedBlockTitle = currentLockedBlock ? currentLockedBlock.block_title : "Платный блок";
-
-  // Функция для ручного открытия платного блока лидеру
   const handleVerifyPayment = async (blockId: number, action: 'approved' | 'rejected') => {
     setVerifying(true);
     try {
@@ -40,7 +30,7 @@ export default function QuizAnswers({ student, stats, answers, onClose }: QuizAn
         body: JSON.stringify({ student_id: Number(student.id), block_id: Number(blockId), action })
       });
       if (res.ok) {
-        alert(action === 'approved' ? `Доступ к объекту "${currentLockedBlockTitle}" открыт!` : 'Заявка отклонена');
+        alert(action === 'approved' ? `Доступ к объекту "${currentLockedBlockTitle}" открыт!` : 'Доступ ограничен');
         onClose();
         window.location.reload();
       }
@@ -62,31 +52,39 @@ export default function QuizAnswers({ student, stats, answers, onClose }: QuizAn
           <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-lg">✕</button>
         </div>
 
-        {/* ДИНАМИЧЕСКИЙ КОНТРОЛЬ ДОСТУПА ПО ТЕКУЩЕМУ БЛОКУ */}
-        <div className="p-4 bg-amber-50 border border-amber-200 rounded-xl space-y-3">
-          <h4 className="text-sm font-bold text-amber-900 flex items-center gap-2">
-            🔑 Контроль платного доступа: <span className="underline font-extrabold">{currentLockedBlockTitle}</span>
-          </h4>
-          <p className="text-xs text-amber-700">
-            Если новичок перевел вам оплату на карту, подтвердите его участие для открытия этого этапа обучения:
-          </p>
-          <div className="flex gap-2">
-            <button 
-              disabled={verifying} 
-              onClick={() => handleVerifyPayment(currentLockedBlockId, 'approved')} 
-              className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg text-xs font-bold transition disabled:opacity-50"
-            >
-              Открыть доступ (Оплата получена)
-            </button>
-            <button 
-              disabled={verifying} 
-              onClick={() => handleVerifyPayment(currentLockedBlockId, 'rejected')} 
-              className="px-4 py-2 bg-red-100 hover:bg-red-200 text-red-700 rounded-lg text-xs font-bold transition disabled:opacity-50"
-            >
-              Закрыть доступ
-            </button>
+        {/* АВТОМАТИЧЕСКИЙ УМНЫЙ КОНТРОЛЬ ДОСТУПА ПО ДАННЫМ ЛЕСТНИЦЫ */}
+        {hasLock && currentLockedBlockId ? (
+          <div className="p-4 bg-amber-50 border border-amber-200 rounded-xl space-y-3">
+            <h4 className="text-sm font-bold text-amber-900 flex items-center gap-2">
+              🔑 Контроль платного доступа: <span className="underline font-extrabold text-blue-700 bg-blue-50 px-2 py-0.5 rounded border border-blue-200">{currentLockedBlockTitle}</span>
+            </h4>
+            <p className="text-xs text-amber-700">
+              Студент дошел до платного этапа обучения. Если вы получили оплату, подтвердите её для открытия контента:
+            </p>
+            <div className="flex gap-2">
+              <button 
+                disabled={verifying} 
+                onClick={() => handleVerifyPayment(currentLockedBlockId, 'approved')} 
+                className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg text-xs font-bold transition disabled:opacity-50"
+              >
+                Открыть доступ (Оплата получена)
+              </button>
+              <button 
+                disabled={verifying} 
+                onClick={() => handleVerifyPayment(currentLockedBlockId, 'rejected')} 
+                className="px-4 py-2 bg-red-100 hover:bg-red-200 text-red-700 rounded-lg text-xs font-bold transition disabled:opacity-50"
+              >
+                Закрыть доступ
+              </button>
+            </div>
           </div>
-        </div>
+        ) : (
+          <div className="p-4 bg-green-50 border border-green-200 rounded-xl">
+            <p className="text-xs text-green-800 font-bold flex items-center gap-2">
+              ✅ Все доступные студенту блоки оплачены или пройдены. Дополнительного подтверждения не требуется.
+            </p>
+          </div>
+        )}
 
         {/* ВЫВОД РЕЗУЛЬТАТОВ ОПРОСОВ */}
         <div className="space-y-4">

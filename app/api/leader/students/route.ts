@@ -11,7 +11,7 @@ export async function GET(request: NextRequest) {
 
     const currentLeaderId = session.userId || (session as any).id;
 
-    // СЛОЖНЫЙ АГРЕГИРУЮЩИЙ ЗАПРОС: считает реальный прогресс без регрессии типов
+    // 1. ВАШ СЛОЖНЫЙ АГРЕГИРУЮЩИЙ ЗАПРОС (Оставляем без изменений, он считает 75% идеально)
     const result = await db.query(
       `SELECT 
         u.id, 
@@ -55,10 +55,75 @@ export async function GET(request: NextRequest) {
       [currentLeaderId, 'student']
     );
 
-    // Возвращаем структуру один в один, сохраняя обратную совместимость
+    // 2. Получаем всю структуру обучения (блоки и уроки) для анализа "лестницы"
+    const courseStructureResult = await db.query(`
+      SELECT 
+        l.id as lesson_id, l.title as lesson_title,
+        b.id as block_id, b.title as block_title, b.is_premium as block_is_premium
+      FROM lessons l
+      INNER JOIN modules m ON m.id = l.module_id
+      INNER JOIN blocks b ON b.id = m.block_id
+      WHERE b.leader_id = $1 OR b.leader_id IS NULL
+      ORDER BY b.order_index ASC, m.order_index ASC, l.order_index ASC
+    `, [currentLeaderId]);
+
+    const allLessons = courseStructureResult.rows;
+
+    // 3. Динамически рассчитываем точку блокировки для каждого студента
+    const calculatedStudents = await Promise.all(
+      result.rows.map(async (student) => {
+        // Вытягиваем пройденные уроки именно этого студента
+        const progressRes = await db.query(
+          "SELECT lesson_id FROM progress WHERE user_id = $1 AND status = 'completed'",
+          [student.id]
+        );
+        const completedIds = new Set(progressRes.rows.map(r => r.lesson_id));
+
+        // Вытягиваем уже одобренные доступы этого студента
+        const paymentsRes = await db.query(
+          "SELECT block_id FROM premium_access WHERE user_id = $1 AND status = 'approved'",
+          [student.id]
+        );
+        const approvedBlockIds = new Set(paymentsRes.rows.map(r => Number(r.block_id)));
+
+        let currentLockedBlockId: number | null = null;
+        let currentLockedBlockTitle: string | null = null;
+        let foundFirstUncompleted = false;
+
+        // Бежим по лестнице уроков и ищем первый непройденный заблокированный платный блок
+        for (const lesson of allLessons) {
+          const isCompleted = completedIds.has(lesson.lesson_id);
+          const isPremiumBlock = 
+            lesson.block_is_premium === true || 
+            lesson.block_is_premium === 'true' || 
+            lesson.block_is_premium === 1 || 
+            String(lesson.block_title).toLowerCase().includes('платный');
+          
+          const hasLeaderApproved = approvedBlockIds.has(Number(lesson.block_id));
+
+          if (!isCompleted && !foundFirstUncompleted) {
+            foundFirstUncompleted = true;
+            // Если студент уперся в платный блок, который еще не одобрен лидером
+            if (isPremiumBlock && !hasLeaderApproved) {
+              currentLockedBlockId = Number(lesson.block_id);
+              currentLockedBlockTitle = lesson.block_title;
+              break; // Нашли текущую точку останова, выходим из цикла
+            }
+          }
+        }
+
+        return {
+          ...student,
+          current_locked_block_id: currentLockedBlockId,
+          current_locked_block_title: currentLockedBlockTitle
+        };
+      })
+    );
+
+    // Возвращаем структуру один в один с добавлением умных динамических полей
     return NextResponse.json({ 
       success: true, 
-      students: result.rows,
+      students: calculatedStudents,
       leaderId: currentLeaderId 
     });
   } catch (error) {
