@@ -20,10 +20,10 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Пользователь не найден' }, { status: 404 });
     }
     
-    // ИСПРАВЛЕНО: Добавлен индекс [0]
     const user = userResult.rows[0]; 
     const filterLeaderId = user.role === 'student' ? user.leader_id : user.id;
 
+    // 1. Получаем абсолютно все уроки, доступные через лидера
     const allLessonsResult = await db.query(`
       SELECT 
         l.id as lesson_id, l.title as lesson_title, l.type as lesson_type, l.order_index as lesson_order,
@@ -36,6 +36,7 @@ export async function GET(request: NextRequest) {
       ORDER BY b.order_index ASC, m.order_index ASC, l.order_index ASC
     `, [filterLeaderId]);
 
+    // 2. Получаем одобренные платежи
     const paymentsResult = await db.query(
       "SELECT block_id, status FROM premium_access WHERE user_id = $1",
       [currentUserId]
@@ -45,46 +46,55 @@ export async function GET(request: NextRequest) {
       paymentsResult.rows.filter(r => r.status === 'approved').map(r => r.block_id)
     );
 
-    // ИСПРАВЛЕНО: Возвращен параметр [currentUserId]
+    // 3. Получаем список пройденных уроков
     const progressResult = await db.query(
       "SELECT lesson_id FROM progress WHERE user_id = $1 AND status = 'completed'",
       [currentUserId]
     );
     const completedIds = new Set(progressResult.rows.map(r => r.lesson_id));
 
-    let previousCompleted = true;
     let firstBlockId: number | null = null;
+    if (allLessonsResult.rows.length > 0) {
+      firstBlockId = allLessonsResult.rows[0].block_id;
+    }
+
+    let foundFirstUncompleted = false;
     
+    // 4. Расчет статусов уроков
     const lessonsWithStatus = allLessonsResult.rows.map((lesson, index) => {
       const isCompleted = completedIds.has(lesson.lesson_id);
       
-      if (index === 0) {
-        firstBlockId = lesson.block_id;
-      }
-
-      const isPremiumFlagInDB = 
+      // Блок платный, если он не первый ИЛИ в его названии есть слово "платный"
+      const isPremiumBlock = 
         lesson.block_id !== firstBlockId || 
         String(lesson.block_title).toLowerCase().includes('платный');
 
       const hasLeaderApproved = approvedBlockIds.has(lesson.block_id);
-      const isBlockLockedByPayment = user.role === 'student' && isPremiumFlagInDB && !hasLeaderApproved;
+      
+      // Жесткая блокировка по оплате: ТОЛЬКО если урок НЕ пройден, а блок платный и нет аппрува
+      const isLockedByPayment = user.role === 'student' && isPremiumBlock && !hasLeaderApproved && !isCompleted;
 
       let status: string;
-      if (isBlockLockedByPayment) {
-        status = 'locked';
-      } else if (isCompleted) {
+
+      if (isCompleted) {
+        // УЖЕ ПРОЙДЕННЫЕ уроки всегда остаются открытыми для повторения
         status = 'completed';
-      } else if ((index === 0 || previousCompleted) && !isBlockLockedByPayment) {
+      } else if (isLockedByPayment) {
+        // Заблокировано лидером
+        status = 'locked';
+      } else if (!foundFirstUncompleted) {
+        // Первый еще не пройденный урок в доступном блоке становится активным
         status = 'available';
+        foundFirstUncompleted = true;
       } else {
+        // Все последующие невыполненные уроки ждут своей очереди по «лестнице»
         status = 'locked';
       }
 
-      if (isBlockLockedByPayment || !isCompleted) {
-        previousCompleted = false;
-      } else {
-        previousCompleted = true;
-      }
+      console.log(
+        `🛡️ [LOCK AUDIT] Урок: "${lesson.lesson_title}" (Блок: "${lesson.block_title}") -> ` +
+        `Пройден: ${isCompleted}, Премиум: ${isPremiumBlock}, Аппрув: ${hasLeaderApproved} -> СТАТУС: ${status}`
+      );
 
       return {
         id: lesson.lesson_id,
@@ -94,12 +104,13 @@ export async function GET(request: NextRequest) {
         order_index: lesson.lesson_order,
         block_id: lesson.block_id,
         block_title: lesson.block_title,
-        block_is_premium: isPremiumFlagInDB,
+        block_is_premium: isPremiumBlock,
         module_title: lesson.module_title,
         status: status
       };
     });
 
+    // 5. Группировка структуры для фронтенда (остается без изменений)
     const blocksMap = new Map();
     for (const lesson of lessonsWithStatus) {
       if (!blocksMap.has(lesson.block_id)) {
