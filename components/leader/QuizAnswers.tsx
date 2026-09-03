@@ -26,8 +26,8 @@ export default function QuizAnswers({ student, stats, answers, onClose }: QuizAn
     return isPremium || row.status === 'locked';
   });
 
-  // 3. Динамически подставляем ID и Имя блока для MVP без хардкода
-  const currentLockedBlockId = currentLockedBlock ? currentLockedBlock.block_id : 2;
+  // 3. Динамически подставляем ID и Имя блока (ИСПРАВЛЕНО: Принудительный Number)
+  const currentLockedBlockId = currentLockedBlock ? Number(currentLockedBlock.block_id) : 2;
   const currentLockedBlockTitle = currentLockedBlock ? currentLockedBlock.block_title : "Платный блок";
 
   // Функция для ручного открытия платного блока лидеру
@@ -37,7 +37,7 @@ export default function QuizAnswers({ student, stats, answers, onClose }: QuizAn
       const res = await fetch('/api/leader/payments', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ student_id: student.id, block_id: blockId, action })
+        body: JSON.stringify({ student_id: Number(student.id), block_id: Number(blockId), action })
       });
       if (res.ok) {
         alert(action === 'approved' ? `Доступ к объекту "${currentLockedBlockTitle}" открыт!` : 'Заявка отклонена');

@@ -36,14 +36,17 @@ export async function GET(request: NextRequest) {
       ORDER BY b.order_index ASC, m.order_index ASC, l.order_index ASC
     `, [filterLeaderId]);
 
-    // 2. Вытягиваем ОДОБРЕННЫЕ платежи для текущего пользователя
+    // 2. Вытягиваем ОДОБРЕННЫЕ платежи
     const paymentsResult = await db.query(
       "SELECT block_id, status FROM premium_access WHERE user_id = $1",
       [currentUserId]
     );
     
+    // ИСПРАВЛЕНО: Принудительное приведение к Number, чтобы Set.has() работал корректно
     const approvedBlockIds = new Set(
-      paymentsResult.rows.filter(r => r.status === 'approved').map(r => r.block_id)
+      paymentsResult.rows
+        .filter(r => r.status === 'approved')
+        .map(r => Number(r.block_id))
     );
 
     // 3. Получаем список пройденных уроков
@@ -55,21 +58,19 @@ export async function GET(request: NextRequest) {
 
     let foundFirstUncompleted = false;
     
-    // 4. Динамический расчет статусов уроков для неограниченного числа блоков
+    // 4. Динамический расчет статусов уроков
     const lessonsWithStatus = allLessonsResult.rows.map((lesson, index) => {
       const isCompleted = completedIds.has(lesson.lesson_id);
       
-      // Блок признается премиумным динамически по флагу из БД или по вхождению слова в название
       const isPremiumBlock = 
         lesson.block_is_premium === true || 
         lesson.block_is_premium === 'true' ||
         lesson.block_is_premium === 1 ||
         String(lesson.block_title).toLowerCase().includes('платный');
 
-      // Динамическая проверка аппрува именно для текущего block_id
-      const hasLeaderApproved = approvedBlockIds.has(lesson.block_id);
+      // ИСПРАВЛЕНО: Проверка в Set идет строго по числовому типу ID
+      const hasLeaderApproved = approvedBlockIds.has(Number(lesson.block_id));
       
-      // Блокируем только непройденные уроки в платных блоках без аппрува
       const isLockedByPayment = user.role === 'student' && isPremiumBlock && !hasLeaderApproved && !isCompleted;
 
       let status: string;
@@ -96,7 +97,7 @@ export async function GET(request: NextRequest) {
         title: lesson.lesson_title,
         type: lesson.lesson_type,
         order_index: lesson.lesson_order,
-        block_id: lesson.block_id,
+        block_id: Number(lesson.block_id), // Приводим к числу для фронтенда
         block_title: lesson.block_title,
         block_is_premium: isPremiumBlock,
         module_title: lesson.module_title,
