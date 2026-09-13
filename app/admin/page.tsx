@@ -7,7 +7,7 @@ import LogoutButton from '@/components/ui/LogoutButton';
 interface Leader { id: number; email: string; name: string; students_count: number; }
 interface Block { id: number; title: string; order_index: number; is_premium?: boolean; modules: Module[]; }
 interface Module { id: number; title: string; order_index: number; lessons: Lesson[]; }
-interface Lesson { id: number; title: string; type: string; content: string; description: string; quiz_data?: string; homework_data?: string; order_index: number; }
+interface Lesson { id: number; title: string; type: string; content: string; description: string; quiz_data?: string; homework_data?: string; order_index: number; case_images?: string[]; case_details?: any;}
 
 export default function AdminPage() {
   const router = useRouter();
@@ -304,6 +304,10 @@ function LessonForm({ lesson, onSave, onCancel }: any) {
   const [showQuiz, setShowQuiz] = useState(false);
   const [homeworkText, setHomeworkText] = useState('');
   const [showHomework, setShowHomework] = useState(false);
+  const [caseImages, setCaseImages] = useState<string[]>([]);
+  const [duration, setDuration] = useState('');
+  const [products, setProducts] = useState('');
+  const [resultText, setResultText] = useState('');
 
   useEffect(() => {
     if (lesson?.quiz_data) {
@@ -323,6 +327,18 @@ function LessonForm({ lesson, onSave, onCancel }: any) {
       setHomeworkText(lesson.homework_data);
       setShowHomework(true);
     }
+    if (lesson?.type === 'case') {
+      setCaseImages(Array.isArray(lesson.case_images) ? lesson.case_images : []);
+      const details = typeof lesson.case_details === 'string' 
+        ? JSON.parse(lesson.case_details || '{}') 
+        : (lesson.case_details || {});
+      setDuration(details.duration || '');
+      setResultText(details.resultText || '');
+      setProducts(details.products ? details.products.join(', ') : '');
+    } else {
+      // Очищаем поля кейса, если открыли обычный урок, чтобы данные не смешивались
+      setCaseImages([]); setDuration(''); setProducts(''); setResultText('');
+    }
   }, [lesson]);
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -334,9 +350,26 @@ function LessonForm({ lesson, onSave, onCancel }: any) {
       formDataUpload.append('file', file);
       const response = await fetch('/api/admin/upload', { method: 'POST', body: formDataUpload });
       const data = await response.json();
-      if (response.ok) setFormData({ ...formData, content: data.url });
-      else alert(data.error || 'Ошибка');
-    } catch { alert('Ошибка загрузки'); } finally { setUploading(false); }
+      
+      // НАЧАЛО ИЗМЕНЕНИЙ
+      if (response.ok) {
+        if (formData.type === 'case') {
+          // Если тип урока - кейс, добавляем новый файл в массив галереи результатов
+          setCaseImages(prev => [...prev, data.url]);
+        } else {
+          // Для обычных видео-уроков сохраняем ваше старое поведение
+          setFormData({ ...formData, content: data.url });
+        }
+      } else {
+        alert(data.error || 'Ошибка');
+      }
+      // КОНЕЦ ИЗМЕНЕНИЙ
+
+    } catch { 
+      alert('Ошибка загрузки'); 
+    } finally { 
+      setUploading(false); 
+    }
   };
 
   const addQuestion = () => {
@@ -362,7 +395,22 @@ function LessonForm({ lesson, onSave, onCancel }: any) {
       }
     }
     const homework_data = showHomework ? homeworkText : '';
-    onSave({ ...formData, quiz_data, homework_data });
+
+    // Создаем базовый объект для сохранения
+    const savePayload: any = { ...formData, quiz_data, homework_data };
+
+    // Если администратор создает или редактирует КЕЙС, добавляем новые поля
+    if (formData.type === 'case') {
+      savePayload.case_images = caseImages; // стейт с массивом картинок результатов
+      savePayload.case_details = {
+        duration: duration.trim(),
+        resultText: resultText.trim(),
+        products: products.split(',').map(p => p.trim()).filter(Boolean) // бьем строку БАДов в массив
+      };
+    }
+
+    // Вызываем вашу оригинальную функцию сохранения, но передаем расширенный savePayload
+    onSave(savePayload);
   };
 
   return (
@@ -383,10 +431,92 @@ function LessonForm({ lesson, onSave, onCancel }: any) {
             <select value={formData.type} onChange={(e) => setFormData({ ...formData, type: e.target.value })} className="w-full px-3 py-2 border-2 border-gray-400 rounded-lg text-gray-900 font-semibold bg-white">
               <option value="video">🎬 Видео</option>
               <option value="text">📄 Текст</option>
+              <option value="case">🌱 Кейс результатов (Siberian Wellness)</option>
             </select>
           </div>
 
-          {formData.type === 'video' ? (
+          {formData.type === 'case' ? (
+            <div className="p-4 bg-emerald-50 rounded-xl border border-emerald-200 space-y-4">
+              <h4 className="text-xs font-bold text-emerald-800 uppercase tracking-wider flex items-center gap-1">
+                🌱 Настройка MLM Кейса Результатов
+              </h4>
+              
+              <div>
+                <label className="block text-sm font-bold text-gray-900 mb-2">
+                  Загрузить фото/видео результатов (До/После)
+                </label>
+                <label className="block cursor-pointer bg-emerald-100 hover:bg-emerald-200 border-2 border-dashed border-emerald-400 rounded-lg p-4 text-center">
+                  <span className="text-emerald-800 font-bold">📸 Нажмите для добавления файла в галерею кейса</span>
+                  <input type="file" accept="image/*,video/*" onChange={handleFileUpload} className="hidden" />
+                </label>
+                {uploading && <p className="text-emerald-700 text-sm mt-1 font-semibold">Загрузка...</p>}
+                
+                {/* Интерактивное превью уже загруженных картинок для кейса с кнопкой удаления */}
+                {caseImages.length > 0 && (
+                  <div className="flex gap-2 mt-3 overflow-x-auto pb-2">
+                    {caseImages.map((img, idx) => (
+                      <div key={idx} className="relative w-16 h-16 rounded-md overflow-hidden bg-gray-200 border border-emerald-300 flex-shrink-0 group">
+                        <img src={img} alt="Результат" className="w-full h-full object-cover" />
+                        <button 
+                          type="button" 
+                          onClick={() => setCaseImages(caseImages.filter((_, i) => i !== idx))} 
+                          className="absolute inset-0 bg-red-600/80 text-white font-bold opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-xs"
+                        >
+                          ✕
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-bold text-gray-900 mb-1">Срок применения программы БАД</label>
+                  <input 
+                    type="text" 
+                    placeholder="например, 3 недели / 2 месяца" 
+                    value={duration} 
+                    onChange={e => setDuration(e.target.value)} 
+                    className="w-full px-3 py-2 border border-gray-400 rounded-lg text-gray-900" 
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-bold text-gray-900 mb-1">Продукты Siberian Wellness (через запятую)</label>
+                  <input 
+                    type="text" 
+                    placeholder="НовоМин, Хронолонг, Истоки Чистоты" 
+                    value={products} 
+                    onChange={e => setProducts(e.target.value)} 
+                    className="w-full px-3 py-2 border border-gray-400 rounded-lg text-gray-900" 
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-bold text-gray-900 mb-1">Полная история и разбор кейса (основной text)</label>
+                <textarea 
+                  placeholder="Опишите ситуацию, жалобы клиента и схему приема..." 
+                  value={formData.content} 
+                  onChange={(e) => setFormData({ ...formData, content: e.target.value })} 
+                  className="w-full px-3 py-2 border border-gray-400 rounded-lg text-gray-900" 
+                  rows={4} 
+                  required 
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-bold text-gray-900 mb-1">Итоговый вывод / Главный бизнес-инсайт</label>
+                <input 
+                  type="text" 
+                  placeholder="Краткое резюме эксперта..." 
+                  value={resultText} 
+                  onChange={e => setResultText(e.target.value)} 
+                  className="w-full px-3 py-2 border border-gray-400 rounded-lg text-gray-900" 
+                />
+              </div>
+            </div>
+          ) : formData.type === 'video' ? (
             <div className="space-y-3">
               <div>
                 <label className="block text-sm font-bold text-gray-900 mb-2">Загрузить видео</label>
