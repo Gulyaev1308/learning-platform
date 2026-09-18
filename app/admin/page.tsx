@@ -346,24 +346,32 @@ function LessonForm({ lesson, onSave, onCancel }: any) {
     if (!file) return;
     setUploading(true);
     try {
-      // 1. Просим у сервера пропуск для загрузки
+      setUploading(true); // если используется
+
+      // 1. Запрашиваем ссылку у бэкенда, передавая имя и ТИП файла
       const response = await fetch('/api/admin/upload', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ filename: file.name, filetype: file.type }),
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ 
+          fileName: file.name, 
+          fileType: file.type // Передаем 'video/mp4' (или другой тип) на бэк
+        }), 
       });
+      
       const data = await response.json();
 
       if (!response.ok) {
         throw new Error(data.error || 'Не удалось получить пропуск для загрузки');
       }
 
-      // 2. ОТПРАВЛЯЕМ НАПРЯМУЮ С ПК В ОБЛАКО (Сервер Next.js вообще отдыхает)
+      // 2. ОТПРАВЛЯЕМ НАПРЯМУЮ С ПК В ОБЛАКО с совпадающим заголовком Content-Type
       const uploadToS3 = await fetch(data.uploadUrl, {
         method: 'PUT',
-        body: file, // Твой файл видео
+        body: file, 
         headers: {
-          'Content-Type': '', // Очищаем, чтобы браузер не слал multipart/form-data
+          'Content-Type': file.type, // Передаем ТОЧНО такой же тип контента, как на бэкенде!
         }
       });
 
