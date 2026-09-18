@@ -6,7 +6,8 @@ import { getSession } from '@/lib/auth';
 
 const s3 = new S3Client({
   region: 'ru-central1',
-  endpoint: 'https://cloud.ru',
+  endpoint: 'https://s3.cloud.ru', // Официальный эндпоинт Evolution
+  forcePathStyle: true, // ЖЕСТКОЕ ПРАВИЛО: Использовать формат s3.cloud.ru/bucket (Канон для Evolution)
   credentials: {
     accessKeyId: process.env.S3_ACCESS_KEY || '',
     secretAccessKey: process.env.S3_SECRET_KEY || '',
@@ -20,7 +21,6 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Доступ запрещен' }, { status: 403 });
     }
 
-    // Принимаем от фронтенда только имя и тип файла (сам тяжелый файл не шлем!)
     const { filename, filetype } = await request.json();
 
     const ext = path.extname(filename) || '.mp4';
@@ -32,14 +32,13 @@ export async function POST(request: NextRequest) {
       ContentType: filetype || 'video/mp4',
     });
 
-    // Генерируем безопасный пропуск для загрузки, действующий 60 минут
+    // Генерируем ссылку-пропуск, теперь она будет идеально правильного формата
     const uploadUrl = await getSignedUrl(s3, command, { expiresIn: 3600 });
 
-    // Возвращаем фронтенду ссылку для загрузки И итоговый URL, который запишется в базу
     return NextResponse.json({
       success: true,
-      uploadUrl, // Сюда фронтенд загрузит файл напрямую
-      url: `/api/videos/${uniqueFileName}` // Это пойдет в базу данных курсов
+      uploadUrl,
+      url: `https://cloud.ru{process.env.S3_BUCKET_NAME}/${uniqueFileName}` // Прямая ссылка на просмотр видео для плеера
     });
 
   } catch (error) {
