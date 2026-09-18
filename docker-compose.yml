@@ -11,7 +11,7 @@ services:
       - pg_data:/var/lib/postgresql/data
     restart: always
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U $DB_USER -d $DB_NAME"]
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
       interval: 5s
       timeout: 5s
       retries: 5
@@ -23,11 +23,10 @@ services:
     ports:
       - "80:3000"
     environment:
-      DATABASE_URL: postgresql://${DB_USER}:${DB_PASSWORD}@postgres-db:5432/${DB_NAME}?schema=public
-      SESSION_SECRET: ${SESSION_SECRET}
       HOST: 0.0.0.0
       PORT: 3000
       NODE_OPTIONS: --trace-warnings --expose-gc
+    # Переменные DATABASE_URL и SESSION_SECRET приложение Next.js автоматически прочитает из файла .env.production, который создаст робот!
     logging:
       driver: "json-file"
       options:
