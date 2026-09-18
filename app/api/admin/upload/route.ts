@@ -6,7 +6,7 @@ import { getSession } from '@/lib/auth';
 
 const s3 = new S3Client({
   region: 'ru-central1', 
-  endpoint: 'https://cloud.ru', 
+  endpoint: 'https://s3.cloud.ru', 
   forcePathStyle: true, 
   credentials: {
     accessKeyId: process.env.S3_ACCESS_KEY || '',
@@ -33,10 +33,14 @@ export async function POST(request: NextRequest) {
 
     const rawUploadUrl = await getSignedUrl(s3, command, { expiresIn: 3600 });
 
+    // КРИТИЧЕСКИЙ ФИКС: Направляем запрос на S3-шлюз вместо главного сайта Cloud.ru
+    // При этом параметры подписи (сигнатуру) мы вообще НЕ ТРОГАЕМ.
+    const cleanUploadUrl = rawUploadUrl.replace('https://cloud.ru', 'https://s3.cloud.ru');
+
     return NextResponse.json({
       success: true,
-      uploadUrl: rawUploadUrl,
-      url: `https://cloud.ru/mesa-edtech-media-bucket/${uniqueFileName}`
+      uploadUrl: cleanUploadUrl,
+      url: `https://cloud.ru{uniqueFileName}`
     });
 
   } catch (error) {
