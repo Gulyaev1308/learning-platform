@@ -2,7 +2,8 @@
 const nextConfig = {
   output: 'standalone',
   experimental: {
-    proxyClientMaxBodySize: '500mb',
+    // Увеличиваем лимит проксирования тела запроса до 2 ГБ
+    proxyClientMaxBodySize: '2gb',
   },
 }
 
