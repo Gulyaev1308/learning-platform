@@ -1,12 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
+import { S3Client } from '@aws-sdk/client-s3';
+import { Upload } from '@aws-sdk/lib-storage';
+import { Readable } from 'stream';
+import Busboy from 'busboy';
 import path from 'path';
 import { getSession } from '@/lib/auth';
 
-// Инициализируем клиент S3 для Cloud.ru Evolution
+// Инициализируем клиент S3 Cloud.ru Evolution
 const s3 = new S3Client({
-  region: 'ru-central1', // Стандартный регион для Cloud.ru
-  endpoint: 'https://cloud.ru', // Официальный эндпоинт Evolution
+  region: 'ru-central1',
+  endpoint: 'https://cloud.ru',
   credentials: {
     accessKeyId: process.env.S3_ACCESS_KEY || '',
     secretAccessKey: process.env.S3_SECRET_KEY || '',
@@ -21,34 +24,64 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Доступ запрещен' }, { status: 403 });
     }
 
-    // 2. Достаем файл из запроса
-    const formData = await request.formData();
-    const file = formData.get('file') as File;
+    // 2. Получаем заголовки для инициализации Busboy
+    const contentType = request.headers.get('content-type');
+    if (!contentType) {
+      return NextResponse.json({ error: 'Missing Content-Type' }, { status: 400 });
+    }
 
-    if (!file) return NextResponse.json({ error: 'Файл не найден' }, { status: 400 });
+    // 3. Конвертируем Web Stream от Next.js в стандартный Node.js Readable Stream
+    if (!request.body) {
+      return NextResponse.json({ error: 'Empty body' }, { status: 400 });
+    }
+    const nodeStream = Readable.fromWeb(request.body as any);
 
-    // 3. Формируем уникальное имя файла
-    const ext = path.extname(file.name) || '.mp4';
-    const fileName = `video_${Date.now()}${ext}`;
+    const busboy = Busboy({ headers: { 'content-type': contentType } });
 
-    // 4. Переводим файл в буфер для отправки по сети в S3
-    const arrayBuffer = await file.arrayBuffer();
-    const buffer = Buffer.from(arrayBuffer);
+    // Это обещание (Promise) завершится, когда файл полностью перекачается в S3
+    const uploadPromise = new Promise<{ success: boolean; url: string }>((resolve, reject) => {
+      busboy.on('file', (name, fileStream, info) => {
+        const { filename, mimeType } = info;
+        const ext = path.extname(filename) || '.mp4';
+        const fileName = `video_${Date.now()}${ext}`;
 
-    // 5. Отправляем тяжелый файл напрямую в бесконечное облако S3
-    const uploadCommand = new PutObjectCommand({
-      Bucket: process.env.S3_BUCKET_NAME || '',
-      Key: fileName,
-      Body: buffer,
-      ContentType: file.type || 'video/mp4',
+        // Используем профессиональный менеджер загрузки потоков в S3
+        const parallelUpload = new Upload({
+          client: s3,
+          params: {
+            Bucket: process.env.S3_BUCKET_NAME || '',
+            Key: fileName,
+            Body: fileStream, // Передаем поток напрямую! В RAM ничего не копируется
+            ContentType: mimeType || 'video/mp4',
+          },
+          queueSize: 4, // Количество одновременных потоков загрузки частей
+          partSize: 1024 * 1024 * 10, // Размер одной части — 10 МБ (потребление RAM минимально)
+          leavePartsOnError: false,
+        });
+
+        parallelUpload.done()
+          .then(() => {
+            console.log('Потоковая загрузка в S3 завершена:', fileName);
+            resolve({ success: true, url: `/api/videos/${fileName}` });
+          })
+          .catch((err) => {
+            console.error('Ошибка при стриминге в S3:', err);
+            reject(err);
+          });
+      });
+
+      busboy.on('error', (err) => reject(err));
     });
 
-    await s3.send(uploadCommand);
-    console.log('Успешно загружено в Cloud.ru S3:', fileName);
+    // Пускаем поток данных через парсер Busboy
+    nodeStream.pipe(busboy);
 
-    // Возвращаем ссылку. Next.js роут /api/videos/[name] будет читать из S3, фронтенд не сломается!
-    return NextResponse.json({ success: true, url: `/api/videos/${fileName}` });
+    const result = await uploadPromise;
+    
+    // Возвращаем абсолютно стандартный ответ, фронтенд счастлив и ничего не замечает
+    return NextResponse.json(result);
+
   } catch (error) {
-    return NextResponse.json({ error: 'Ошибка S3 хранилища: ' + (error as Error).message }, { status: 500 });
+    return NextResponse.json({ error: 'Ошибка потока S3: ' + (error as Error).message }, { status: 500 });
   }
 }
