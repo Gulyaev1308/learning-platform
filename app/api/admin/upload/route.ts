@@ -29,12 +29,14 @@ export async function POST(request: NextRequest) {
     const command = new PutObjectCommand({
       Bucket: 'mesa-edtech-media-bucket',
       Key: uniqueFileName,
+      // ЖЕСТКИЙ ХАК ДЛЯ CLOUD.RU: отключаем чексуммы, которые вешают их OPTIONS-валидатор
+      // @ts-ignore
+      ChecksumAlgorithm: undefined 
     });
 
     const rawUploadUrl = await getSignedUrl(s3, command, { expiresIn: 3600 });
 
-    // КРИТИЧЕСКИЙ ФИКС: Направляем запрос на S3-шлюз вместо главного сайта Cloud.ru
-    // При этом параметры подписи (сигнатуру) мы вообще НЕ ТРОГАЕМ.
+    // Направляем на правильный S3 домен
     const cleanUploadUrl = rawUploadUrl.replace('https://cloud.ru', 'https://s3.cloud.ru');
 
     return NextResponse.json({
