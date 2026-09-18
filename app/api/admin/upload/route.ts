@@ -4,10 +4,12 @@ import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import path from 'path';
 import { getSession } from '@/lib/auth';
 
+// Каноническая конфигурация S3-клиента для Cloud.ru Evolution
 const s3 = new S3Client({
-  region: 'ru-central1-a', // Регион для Cloud.ru Evolution
-  endpoint: 'https://cloud.ru', 
-  forcePathStyle: true, // Обязательно для Evolution
+  region: 'ru-central1', 
+  endpoint: 'https://s3.cloud.ru', 
+  // КАН ОН: Отключаем Path-Style. SDK сгенерирует ссылку вида bucket.s3.cloud.ru
+  forcePathStyle: false, 
   credentials: {
     accessKeyId: process.env.S3_ACCESS_KEY || '',
     secretAccessKey: process.env.S3_SECRET_KEY || '',
@@ -21,7 +23,6 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Доступ запрещен' }, { status: 403 });
     }
 
-    // Читаем только имя и тип файла (сам файл весом 1 ГБ сервер не принимает!)
     const { filename, filetype } = await request.json();
 
     const ext = path.extname(filename) || '.mp4';
@@ -33,21 +34,13 @@ export async function POST(request: NextRequest) {
       ContentType: filetype || 'video/mp4',
     });
 
-    // Генерируем стандартную пресайнед-ссылку (принимает строго expiresIn)
-    const rawUploadUrl = await getSignedUrl(s3, command, { expiresIn: 3600 });
-
-    // ЖЕЛЕЗОБЕТОННЫЙ ПАТЧ ДЛЯ СОВМЕСТИМОСТИ С CLOUD.RU EVOLUTION:
-    // 1. Принудительно заменяем базовый домен cloud.ru на s3.cloud.ru
-    // 2. Полностью вырезаем параметры чексумм (crc32), которые ломают CORS на стороне Cloud.ru
-    const cleanUploadUrl = rawUploadUrl
-      .replace('https://cloud.ru', 'https://cloud.ru')
-      .replace(/&x-amz-checksum-[^&]*/g, '')
-      .replace(/&x-amz-sdk-checksum-[^&]*/g, '');
+    // Генерируем подписанную ссылку штатными средствами без багов путей
+    const uploadUrl = await getSignedUrl(s3, command, { expiresIn: 3600 });
 
     return NextResponse.json({
       success: true,
-      uploadUrl: cleanUploadUrl, // Чистая, рабочая ссылка-пропуск для фронтенда
-      url: `https://cloud.ru/${process.env.S3_BUCKET_NAME}/${uniqueFileName}` // Ссылка для сохранения в БД уроков
+      uploadUrl, // Ссылка пойдет строго на поддомен s3.cloud.ru
+      url: `https://cloud.ru{process.env.S3_BUCKET_NAME}/${uniqueFileName}`
     });
 
   } catch (error) {
