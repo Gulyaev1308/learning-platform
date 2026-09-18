@@ -34,7 +34,10 @@ export async function POST(request: NextRequest) {
       ContentType: fileType || 'video/mp4', 
     });
 
-    const rawUploadUrl = await getSignedUrl(s3, command, { expiresIn: 3600 });
+    const rawUploadUrl = await getSignedUrl(s3, command, { 
+      expiresIn: 3600,
+      signableHeaders: new Set(['host', 'content-type']) // Хак для Cloud.ru Evolution, принудительно подписываем Content-Type
+    });
 
     // Чистим ссылку от лишних чексумм
     const cleanUploadUrl = rawUploadUrl
