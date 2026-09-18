@@ -42,6 +42,11 @@ jobs:
           # Дублируем монолитную строку в файлы окружения приложения
           echo "DATABASE_URL=postgresql://learning_admin:${{ secrets.PRODUCTION_DB_PASSWORD }}@postgres-db:5432/learning_platform_db?schema=public" > .env.production
           echo "SESSION_SECRET=${{ secrets.PRODUCTION_SESSION_SECRET }}" >> .env.production
+
+          echo "S3_ACCESS_KEY=${{ secrets.S3_ACCESS_KEY }}" >> .env
+          echo "S3_SECRET_KEY=${{ secrets.S3_SECRET_KEY }}" >> .env
+          echo "S3_BUCKET_NAME=${{ secrets.S3_BUCKET_NAME }}" >> .env
+          echo "S3_ENDPOINT=https://cloud.ru" >> .env
           
           # 5. Пересобираем и запускаем Docker-контейнеры приложения и Postgres
           sudo docker compose up -d --build
