@@ -5,9 +5,10 @@ import path from 'path';
 import { getSession } from '@/lib/auth';
 
 const s3 = new S3Client({
-  region: 'ru-central1', 
+  // КРИТИЧЕСКИЙ ЖЕСТКИЙ ФИКС ДЛЯ EVOLUTION S3:
+  region: 'ru-central1-a', // Строго ru-central1-a, никаких ru-central1!
   endpoint: 'https://s3.cloud.ru', 
-  forcePathStyle: true, // КАН ОН: Возвращаем Path-Style (адрес начнется строго с s3.cloud.ru)
+  forcePathStyle: true, // Строго true, чтобы ссылка была s3.cloud.ru/bucket
   credentials: {
     accessKeyId: process.env.S3_ACCESS_KEY || '',
     secretAccessKey: process.env.S3_SECRET_KEY || '',
@@ -29,15 +30,11 @@ export async function POST(request: NextRequest) {
     const command = new PutObjectCommand({
       Bucket: process.env.S3_BUCKET_NAME || '',
       Key: uniqueFileName,
-      ContentType: 'video/mp4', // ЖЕСТКО: заставляем SDK включить content-type в расчет подписи
     });
 
-    // Генерируем сырую ссылку штатными средствами без кастомных аргументов
     const rawUploadUrl = await getSignedUrl(s3, command, { expiresIn: 3600 });
 
-    // ИНЖЕНЕРНЫЙ ПАТЧ СОВМЕСТИМОСТИ С EVOLUTION S3:
-    // 1. Гарантируем правильный эндпоинт s3.cloud.ru, если SDK попытался его сбросить
-    // 2. Полностью вырезаем параметры чексумм и x-id, которые вызывают 400 Bad Request
+    // Чистим ссылку от мусора чексумм и x-id, которые Evolution тоже не любит
     const cleanUploadUrl = rawUploadUrl
       .replace('https://cloud.ru', 'https://s3.cloud.ru')
       .replace(/&x-amz-checksum-[^&]*/g, '')
@@ -46,7 +43,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      uploadUrl: cleanUploadUrl, // Отдаем фронтенду чистую ссылку на s3.cloud.ru без лишнего мусора
+      uploadUrl: cleanUploadUrl,
       url: `https://cloud.ru{process.env.S3_BUCKET_NAME}/${uniqueFileName}`
     });
 
