@@ -33,13 +33,13 @@ jobs:
           # Клонируем проект по склеенной ссылке
           git clone "$FULL_URL" .
           
-          # 4. Создаем файл конфигурации .env на сервере
+          # 4. Создаем файл конфигурации .env на сервере (ИСПРАВЛЕНО: везде >>)
           echo "DB_USER=learning_admin" > .env
           echo "DB_NAME=learning_platform_db" >> .env
-          echo "DB_PASSWORD=${{ secrets.PRODUCTION_DB_PASSWORD }}" > .env
+          echo "DB_PASSWORD=${{ secrets.PRODUCTION_DB_PASSWORD }}" >> .env
           echo "SESSION_SECRET=${{ secrets.PRODUCTION_SESSION_SECRET }}" >> .env
 
-          # Дублируем монолитную строку в файлы окружения приложения
+          # Создаем файлы окружения приложения
           echo "DATABASE_URL=postgresql://learning_admin:${{ secrets.PRODUCTION_DB_PASSWORD }}@postgres-db:5432/learning_platform_db?schema=public" > .env.production
           echo "SESSION_SECRET=${{ secrets.PRODUCTION_SESSION_SECRET }}" >> .env.production
 

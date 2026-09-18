@@ -21,7 +21,7 @@ services:
     build: .
     container_name: learning-platform-app
     ports:
-      - "80:3000"
+      - "3000:80"
     environment:
       DATABASE_URL: postgresql://learning_admin:${DB_PASSWORD}@postgres-db:5432/learning_platform_db?schema=public
       SESSION_SECRET: ${SESSION_SECRET}
