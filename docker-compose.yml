@@ -6,14 +6,14 @@ services:
     image: postgres:15-alpine
     container_name: learning-postgres
     environment:
-      POSTGRES_USER: learning_admin
-      POSTGRES_PASSWORD: "MesaSuperPassword2026!"
-      POSTGRES_DB: learning_platform_db
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_DB: ${DB_NAME}
     volumes:
       - pg_data:/var/lib/postgresql/data
     restart: always
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U learning_admin -d learning_platform_db"]
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER} -d ${DB_NAME}"]
       interval: 5s
       timeout: 5s
       retries: 5
@@ -25,8 +25,8 @@ services:
     ports:
       - "80:3000"
     environment:
-      DATABASE_URL: "postgresql://learning_admin:MesaSuperPassword2026!@postgres-db:5432/learning_platform_db?schema=public"
-      SESSION_SECRET: "super-secret-padlock-key-for-iron-session-32"
+      DATABASE_URL: "postgresql://${DB_USER}:${DB_PASSWORD}@postgres-db:5432/${DB_NAME}?schema=public"
+      SESSION_SECRET: ${SESSION_SECRET}
       HOST: "0.0.0.0"
       PORT: 3000
       NODE_OPTIONS: "--trace-warnings --expose-gc"
