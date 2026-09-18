@@ -6,7 +6,7 @@ import { getSession } from '@/lib/auth';
 
 const s3 = new S3Client({
   region: 'ru-central1',
-  endpoint: 'https://cloud.ru', 
+  endpoint: 'https://s3.cloud.ru', 
   forcePathStyle: true, // Правило для Evolution
   credentials: {
     accessKeyId: process.env.S3_ACCESS_KEY || '',
@@ -39,7 +39,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       success: true,
       uploadUrl, // Ссылка-пропуск для загрузки с вашего ПК напрямую в Сбер
-      url: `https://cloud.ru/${process.env.S3_BUCKET_NAME}/${uniqueFileName}` // Ссылка, которая пойдет в базу данных уроков
+      url: `https://s3.cloud.ru/${process.env.S3_BUCKET_NAME}/${uniqueFileName}` // Ссылка, которая пойдет в базу данных уроков
     });
 
   } catch (error) {
