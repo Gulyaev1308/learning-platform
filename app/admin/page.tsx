@@ -346,30 +346,22 @@ function LessonForm({ lesson, onSave, onCancel }: any) {
     if (!file) return;
     setUploading(true);
     try {
-      // 1. Запрашиваем у нашего бэкенда Next.js безопасную ссылку-пропуск в S3
+      // Отправляем файл сырыми байтами прямо на наш роут, минуя CORS
       const response = await fetch('/api/admin/upload', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ filename: file.name, filetype: file.type }),
+        headers: {
+          'Content-Type': file.type || 'video/mp4',
+          'x-filename': encodeURIComponent(file.name) // Безопасно передаем имя файла через заголовок
+        },
+        body: file // Передаем файл как сырой бинарный поток байтов
       });
+      
       const data = await response.json();
 
       if (!response.ok) {
-        throw new Error(data.error || 'Не удалось получить ссылку для загрузки');
-      }
-
-      // 2. Загружаем файл напрямую с твоего ПК в облако Cloud.ru Evolution S3
-      const uploadToS3 = await fetch(data.uploadUrl, {
-        method: 'PUT',
-        body: file, // Передаем файл потоком из браузера в облако, минуя ОЗУ сервера!
-        headers: { 'Content-Type': file.type || 'video/mp4' },
-      });
-
-      if (!uploadToS3.ok) {
-        throw new Error('Ошибка при отправке файла в облачное хранилище S3');
+        throw new Error(data.error || 'Ошибка при обработке файла сервером');
       }
       
-      // 3. Если всё успешно, сохраняем ссылку в состояние приложения
       if (formData.type === 'case') {
         setCaseImages(prev => [...prev, data.url]);
       } else {
