@@ -6,7 +6,7 @@ import { getSession } from '@/lib/auth';
 
 const s3 = new S3Client({
   // КРИТИЧЕСКИЙ ЖЕСТКИЙ ФИКС ДЛЯ EVOLUTION S3:
-  region: 'ru-central1-a', // Строго ru-central1-a, никаких ru-central1!
+  region: 'ru-central1', // Строго ru-central1-a, никаких ru-central1!
   endpoint: 'https://s3.cloud.ru', 
   forcePathStyle: true, // Строго true, чтобы ссылка была s3.cloud.ru/bucket
   credentials: {
