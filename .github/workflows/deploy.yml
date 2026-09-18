@@ -34,6 +34,8 @@ jobs:
           git clone "$FULL_URL" .
           
           # 4. Создаем файл конфигурации .env на сервере
+          echo "DB_USER=learning_admin" > .env
+          echo "DB_NAME=learning_platform_db" >> .env
           echo "DB_PASSWORD=${{ secrets.PRODUCTION_DB_PASSWORD }}" > .env
           echo "SESSION_SECRET=${{ secrets.PRODUCTION_SESSION_SECRET }}" >> .env
           
