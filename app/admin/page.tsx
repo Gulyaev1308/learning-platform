@@ -348,24 +348,34 @@ function LessonForm({ lesson, onSave, onCancel }: any) {
     try {
       setUploading(true);
 
-      // Упаковываем файл в FormData
-      const uploadData = new FormData();
-      uploadData.append('file', file); 
-
-      // Делаем ОДИН простой POST запрос на свой же сервер
+      // 1. Получаем чистую pre-signed ссылку от бэкенда
       const response = await fetch('/api/admin/upload', {
         method: 'POST',
-        body: uploadData, 
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ fileName: file.name }),
       });
       
       const data = await response.json();
 
-      // Здесь мы уже проверяем, что сервер успешно сохранил файл в S3
       if (!response.ok) {
-        throw new Error(data.error || 'Не удалось загрузить файл на сервер');
+        throw new Error(data.error || 'Не удалось получить ссылку для загрузки');
+      }
+
+      // ХАК ДЛЯ ОБХОДА БАГА CORS: Конвертируем файл в ArrayBuffer, 
+      // чтобы браузер при fetch не подставлял скрытый Content-Type заголовок
+      const arrayBuffer = await file.arrayBuffer();
+
+      // 2. ОТПРАВЛЯЕМ НАПРЯМУЮ В ОБЛАКО (Файл 1.13 ГБ полетит мимо твоего сервера напрямую в S3)
+      const uploadToS3 = await fetch(data.uploadUrl, {
+        method: 'PUT',
+        body: arrayBuffer, // Передаем буфер вместо объекта файла
+      });
+
+      if (!uploadToS3.ok) {
+        throw new Error('Облако S3 отклонило загрузку файла');
       }
       
-      // Сохраняем готовую ссылку в базу уроков (data.url вернулся от бэкенда)
+      // 3. Сохраняем ссылку в базу уроков
       if (formData.type === 'case') {
         setCaseImages(prev => [...prev, data.url]);
       } else {

@@ -6,7 +6,7 @@ import { getSession } from '@/lib/auth';
 
 const s3 = new S3Client({
   region: 'ru-central1', 
-  endpoint: 'https://s3.cloud.ru', 
+  endpoint: 'https://cloud.ru', 
   forcePathStyle: true, 
   credentials: {
     accessKeyId: process.env.S3_ACCESS_KEY || '',
@@ -31,13 +31,12 @@ export async function POST(request: NextRequest) {
       Key: uniqueFileName,
     });
 
-    // Получаем оригинальную ссылку. Ничего из неё НЕ вырезаем через .replace()!
     const rawUploadUrl = await getSignedUrl(s3, command, { expiresIn: 3600 });
 
     return NextResponse.json({
       success: true,
       uploadUrl: rawUploadUrl,
-      url: `https://cloud.ru{uniqueFileName}`
+      url: `https://cloud.ru/mesa-edtech-media-bucket/${uniqueFileName}`
     });
 
   } catch (error) {
