@@ -37,4 +37,6 @@ services:
     depends_on:
       postgres-db:
         condition: service_healthy
-    # МЫ УБРАЛИ database/init.js, приложение запустится напрямую через Dockerfile (node server.js)
+
+volumes:
+  pg_data:
