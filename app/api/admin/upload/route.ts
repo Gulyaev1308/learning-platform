@@ -26,24 +26,17 @@ export async function POST(request: NextRequest) {
     const ext = path.extname(fileName) || '.mp4';
     const uniqueFileName = `video_${Date.now()}${ext}`;
 
-    // НЕ передаем ContentType сюда, чтобы не заставлять OPTIONS-запрос валидировать его
     const command = new PutObjectCommand({
       Bucket: 'mesa-edtech-media-bucket',
       Key: uniqueFileName,
     });
 
-    // Подписываем ТОЛЬКО хост (дефолтное поведение)
+    // Получаем оригинальную ссылку. Ничего из неё НЕ вырезаем через .replace()!
     const rawUploadUrl = await getSignedUrl(s3, command, { expiresIn: 3600 });
-
-    const cleanUploadUrl = rawUploadUrl
-      .replace('https://cloud.ru', 'https://s3.cloud.ru')
-      .replace(/&x-amz-checksum-[^&]*/g, '')
-      .replace(/&x-amz-sdk-checksum-[^&]*/g, '')
-      .replace(/&x-id=[^&]*/g, ''); 
 
     return NextResponse.json({
       success: true,
-      uploadUrl: cleanUploadUrl,
+      uploadUrl: rawUploadUrl,
       url: `https://cloud.ru{uniqueFileName}`
     });
 

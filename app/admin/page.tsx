@@ -366,7 +366,7 @@ function LessonForm({ lesson, onSave, onCancel }: any) {
         method: 'PUT',
         body: file, 
         headers: {
-          'Content-Type': file.type, 
+          'Content-Type': file.type, // Передаем тип файла (video/mp4)
         }
       });
 
