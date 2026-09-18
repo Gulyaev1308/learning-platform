@@ -6,8 +6,8 @@ import { getSession } from '@/lib/auth';
 
 const s3 = new S3Client({
   region: 'ru-central1', 
-  endpoint: 'https://s3.cloud.ru', 
-  forcePathStyle: false, // Оставляем канонический Virtual-Hosted Style
+  endpoint: 'https://cloud.ru', 
+  forcePathStyle: false, // Канонический Virtual-Hosted Style
   credentials: {
     accessKeyId: process.env.S3_ACCESS_KEY || '',
     secretAccessKey: process.env.S3_SECRET_KEY || '',
@@ -35,16 +35,17 @@ export async function POST(request: NextRequest) {
     // Генерируем подписанную ссылку
     const rawUploadUrl = await getSignedUrl(s3, command, { expiresIn: 3600 });
 
-    // КАН ОНИЧЕСКИЙ ПАТЧ СОВМЕСТИМОСТИ С EVOLUTION S3:
-    // Удаляем параметры чексумм (crc32), которые вызывают ошибку 400 Bad Request на серверах Cloud.ru
+    // ФИНАЛЬНЫЙ ПАТЧ СОВМЕСТИМОСТИ С CLOUD.RU EVOLUTION S3:
+    // Удаляем параметры чексумм и параметр x-id, которые вызывают 400 Ошибку в Cloud.ru
     const cleanUploadUrl = rawUploadUrl
       .replace(/&x-amz-checksum-[^&]*/g, '')
-      .replace(/&x-amz-sdk-checksum-[^&]*/g, '');
+      .replace(/&x-amz-sdk-checksum-[^&]*/g, '')
+      .replace(/&x-id=[^&]*/g, ''); // ВАЖНО: Удаляем ломающий параметр x-id=PutObject
 
     return NextResponse.json({
       success: true,
-      uploadUrl: cleanUploadUrl, // Отдаем фронтенду чистую ссылку без ломающих параметров
-      url: `https://cloud.ru{process.env.S3_BUCKET_NAME}/${uniqueFileName}`
+      uploadUrl: cleanUploadUrl, // Полностью чистая ссылка, совместимая с Cloud.ru
+      url: `https://cloud.ru/${process.env.S3_BUCKET_NAME}/${uniqueFileName}`
     });
 
   } catch (error) {
