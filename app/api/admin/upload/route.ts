@@ -29,19 +29,24 @@ export async function POST(request: NextRequest) {
     const command = new PutObjectCommand({
       Bucket: 'mesa-edtech-media-bucket',
       Key: uniqueFileName,
-      // ЖЕСТКИЙ ХАК ДЛЯ CLOUD.RU: отключаем чексуммы, которые вешают их OPTIONS-валидатор
-      // @ts-ignore
-      ChecksumAlgorithm: undefined 
     });
 
     const rawUploadUrl = await getSignedUrl(s3, command, { expiresIn: 3600 });
 
-    // Направляем на правильный S3 домен
-    const cleanUploadUrl = rawUploadUrl.replace('https://cloud.ru', 'https://s3.cloud.ru');
+    // БЕЗОПАСНАЯ ОЧИСТКА ССЫЛКИ ЧЕРЕЗ ОБЪЕКТ URL
+    const urlObj = new URL(rawUploadUrl);
+    
+    // Меняем хост на правильный S3 эндпоинт
+    urlObj.hostname = 's3.cloud.ru';
+    
+    // Жестко удаляем чексуммы, которые вешают OPTIONS-запрос в Cloud.ru
+    urlObj.searchParams.delete('x-amz-checksum-crc32');
+    urlObj.searchParams.delete('x-amz-sdk-checksum-algorithm');
+    urlObj.searchParams.delete('x-id'); // Очищаем x-id=PutObject, так как метод PUT и так понятен
 
     return NextResponse.json({
       success: true,
-      uploadUrl: cleanUploadUrl,
+      uploadUrl: urlObj.toString(),
       url: `https://cloud.ru{uniqueFileName}`
     });
 
