@@ -346,22 +346,30 @@ function LessonForm({ lesson, onSave, onCancel }: any) {
     if (!file) return;
     setUploading(true);
     try {
-      // Отправляем файл сырыми байтами прямо на наш роут, минуя CORS
+      // 1. Просим у сервера пропуск для загрузки
       const response = await fetch('/api/admin/upload', {
         method: 'POST',
-        headers: {
-          'Content-Type': file.type || 'video/mp4',
-          'x-filename': encodeURIComponent(file.name) // Безопасно передаем имя файла через заголовок
-        },
-        body: file // Передаем файл как сырой бинарный поток байтов
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ filename: file.name, filetype: file.type }),
       });
-      
       const data = await response.json();
 
       if (!response.ok) {
-        throw new Error(data.error || 'Ошибка при обработке файла сервером');
+        throw new Error(data.error || 'Не удалось получить пропуск для загрузки');
+      }
+
+      // 2. ОТПРАВЛЯЕМ НАПРЯМУЮ С ПК В ОБЛАКО (Сервер Next.js вообще отдыхает)
+      const uploadToS3 = await fetch(data.uploadUrl, {
+        method: 'PUT',
+        body: file,
+        headers: { 'Content-Type': file.type || 'video/mp4' },
+      });
+
+      if (!uploadToS3.ok) {
+        throw new Error('Облако S3 отклонило загрузку файла');
       }
       
+      // 3. Сохраняем ссылку в базу уроков
       if (formData.type === 'case') {
         setCaseImages(prev => [...prev, data.url]);
       } else {
