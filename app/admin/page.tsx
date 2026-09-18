@@ -346,29 +346,40 @@ function LessonForm({ lesson, onSave, onCancel }: any) {
     if (!file) return;
     setUploading(true);
     try {
-      const formDataUpload = new FormData();
-      formDataUpload.append('file', file);
-      const response = await fetch('/api/admin/upload', { method: 'POST', body: formDataUpload });
+      // 1. Запрашиваем у нашего бэкенда Next.js безопасную ссылку-пропуск в S3
+      const response = await fetch('/api/admin/upload', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ filename: file.name, filetype: file.type }),
+      });
       const data = await response.json();
-      
-      // НАЧАЛО ИЗМЕНЕНИЙ
-      if (response.ok) {
-        if (formData.type === 'case') {
-          // Если тип урока - кейс, добавляем новый файл в массив галереи результатов
-          setCaseImages(prev => [...prev, data.url]);
-        } else {
-          // Для обычных видео-уроков сохраняем ваше старое поведение
-          setFormData({ ...formData, content: data.url });
-        }
-      } else {
-        alert(data.error || 'Ошибка');
-      }
-      // КОНЕЦ ИЗМЕНЕНИЙ
 
-    } catch { 
-      alert('Ошибка загрузки'); 
-    } finally { 
-      setUploading(false); 
+      if (!response.ok) {
+        throw new Error(data.error || 'Не удалось получить ссылку для загрузки');
+      }
+
+      // 2. Загружаем файл напрямую с твоего ПК в облако Cloud.ru Evolution S3
+      const uploadToS3 = await fetch(data.uploadUrl, {
+        method: 'PUT',
+        body: file, // Передаем файл потоком из браузера в облако, минуя ОЗУ сервера!
+        headers: { 'Content-Type': file.type || 'video/mp4' },
+      });
+
+      if (!uploadToS3.ok) {
+        throw new Error('Ошибка при отправке файла в облачное хранилище S3');
+      }
+      
+      // 3. Если всё успешно, сохраняем ссылку в состояние приложения
+      if (formData.type === 'case') {
+        setCaseImages(prev => [...prev, data.url]);
+      } else {
+        setFormData({ ...formData, content: data.url });
+      }
+      
+    } catch (error) {
+      alert((error as Error).message || 'Ошибка загрузки');
+    } finally {
+      setUploading(false);
     }
   };
 
