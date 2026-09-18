@@ -21,25 +21,20 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Доступ запрещен' }, { status: 403 });
     }
 
-    // Принимаем параметры с фронтенда с соблюдением CamelCase
-    const { fileName, fileType } = await request.json();
+    const { fileName } = await request.json();
 
     const ext = path.extname(fileName) || '.mp4';
     const uniqueFileName = `video_${Date.now()}${ext}`;
 
-    // Передаем ContentType, чтобы AWS SDK добавил его в расчет подписи ссылки
+    // НЕ передаем ContentType сюда, чтобы не заставлять OPTIONS-запрос валидировать его
     const command = new PutObjectCommand({
       Bucket: 'mesa-edtech-media-bucket',
       Key: uniqueFileName,
-      ContentType: fileType || 'video/mp4', 
     });
 
-    const rawUploadUrl = await getSignedUrl(s3, command, { 
-      expiresIn: 3600,
-      signableHeaders: new Set(['host', 'content-type']) // Хак для Cloud.ru Evolution, принудительно подписываем Content-Type
-    });
+    // Подписываем ТОЛЬКО хост (дефолтное поведение)
+    const rawUploadUrl = await getSignedUrl(s3, command, { expiresIn: 3600 });
 
-    // Чистим ссылку от лишних чексумм
     const cleanUploadUrl = rawUploadUrl
       .replace('https://cloud.ru', 'https://s3.cloud.ru')
       .replace(/&x-amz-checksum-[^&]*/g, '')
@@ -49,7 +44,6 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       success: true,
       uploadUrl: cleanUploadUrl,
-      // Исправлена синтаксическая ошибка генерации финального URL
       url: `https://cloud.ru{uniqueFileName}`
     });
 

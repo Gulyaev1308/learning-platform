@@ -345,19 +345,13 @@ function LessonForm({ lesson, onSave, onCancel }: any) {
     const file = e.target.files?.[0];
     if (!file) return;
     setUploading(true);
-    try {
-      setUploading(true); // если используется
+     try {
+      setUploading(true);
 
-      // 1. Запрашиваем ссылку у бэкенда, передавая имя и ТИП файла
       const response = await fetch('/api/admin/upload', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ 
-          fileName: file.name, 
-          fileType: file.type // Передаем 'video/mp4' (или другой тип) на бэк
-        }), 
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ fileName: file.name }), // Передаем только имя
       });
       
       const data = await response.json();
@@ -366,12 +360,13 @@ function LessonForm({ lesson, onSave, onCancel }: any) {
         throw new Error(data.error || 'Не удалось получить пропуск для загрузки');
       }
 
-      // 2. ОТПРАВЛЯЕМ НАПРЯМУЮ С ПК В ОБЛАКО с совпадающим заголовком Content-Type
+      // Отправляем файл. Браузер сделает OPTIONS, Cloud.ru увидит, что content-type не подписан,
+      // проверит CORS (где у нас разрешено всё через '*') и вернет 200 OK!
       const uploadToS3 = await fetch(data.uploadUrl, {
         method: 'PUT',
         body: file, 
         headers: {
-          'Content-Type': file.type, // Передаем ТОЧНО такой же тип контента, как на бэкенде!
+          'Content-Type': file.type, 
         }
       });
 
@@ -379,7 +374,6 @@ function LessonForm({ lesson, onSave, onCancel }: any) {
         throw new Error('Облако S3 отклонило загрузку файла');
       }
       
-      // 3. Сохраняем ссылку в базу уроков
       if (formData.type === 'case') {
         setCaseImages(prev => [...prev, data.url]);
       } else {
