@@ -2,9 +2,11 @@
 const nextConfig = {
   output: 'standalone',
   experimental: {
-    // Увеличиваем лимит проксирования тела запроса до 2 ГБ
-    proxyClientMaxBodySize: '2gb',
+    // Расширяем лимит буферизации прокси до 4 ГБ
+    proxyClientMaxBodySize: '4gb',
+    // Снимаем ограничения с middleware на размер входящего потока
+    middlewareClientMaxBodySize: '4gb',
   },
 }
 
-module.exports = nextConfig
+module.exports = nextConfig;
