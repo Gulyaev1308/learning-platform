@@ -38,4 +38,4 @@ jobs:
           echo "SESSION_SECRET=${{ secrets.PRODUCTION_SESSION_SECRET }}" >> .env
           
           # 5. Пересобираем и запускаем Docker-контейнеры приложения и Postgres
-          sudo docker compose up -d --build
+          sudo docker-compose up -d --build
