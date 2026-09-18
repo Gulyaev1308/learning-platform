@@ -361,8 +361,10 @@ function LessonForm({ lesson, onSave, onCancel }: any) {
       // 2. ОТПРАВЛЯЕМ НАПРЯМУЮ С ПК В ОБЛАКО (Сервер Next.js вообще отдыхает)
       const uploadToS3 = await fetch(data.uploadUrl, {
         method: 'PUT',
-        body: file, // Передаем сам файл
-        // БЛОК headers ПОЛНОСТЬЮ УДАЛЯЕМ, чтобы браузер не слал content-type в OPTIONS-запросе
+        body: file, 
+        headers: {
+          'Content-Type': 'video/mp4', // СТРОГО совпадает с тем, что подписал бэкенд!
+        },
         credentials: 'omit', 
       });
 

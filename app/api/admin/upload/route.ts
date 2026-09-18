@@ -29,7 +29,7 @@ export async function POST(request: NextRequest) {
     const command = new PutObjectCommand({
       Bucket: process.env.S3_BUCKET_NAME || '',
       Key: uniqueFileName,
-      ContentType: filetype || 'video/mp4',
+      ContentType: 'video/mp4', // ЖЕСТКО: заставляем SDK включить content-type в расчет подписи
     });
 
     // Генерируем сырую ссылку штатными средствами без кастомных аргументов
