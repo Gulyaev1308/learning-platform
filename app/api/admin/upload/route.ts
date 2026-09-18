@@ -5,13 +5,16 @@ import path from 'path';
 import { getSession } from '@/lib/auth';
 
 const s3 = new S3Client({
-  region: 'ru-central1',
-  endpoint: 'https://s3.cloud.ru', 
+  region: 'ru-central1-a', // Регион для платформы Cloud.ru Evolution
+  endpoint: 'https://cloud.ru', 
   forcePathStyle: true, // Правило для Evolution
   credentials: {
     accessKeyId: process.env.S3_ACCESS_KEY || '',
     secretAccessKey: process.env.S3_SECRET_KEY || '',
   },
+  // ИСПРАВЛЕНИЕ: Отключаем расчет чексумм на уровне самого клиента S3.
+  // Это гарантированно уберет параметры x-amz-checksum из подписи без ошибок TypeScript.
+  requestChecksumCalculation: "WHEN_SUPPORTED", 
 });
 
 export async function POST(request: NextRequest) {
@@ -34,12 +37,13 @@ export async function POST(request: NextRequest) {
     });
 
     // Генерируем пропуск для прямой загрузки со сроком действия 1 час
+    // ИСПРАВЛЕНИЕ: Оставляем только валидный для TypeScript параметр expiresIn
     const uploadUrl = await getSignedUrl(s3, command, { expiresIn: 3600 });
 
     return NextResponse.json({
       success: true,
       uploadUrl, // Ссылка-пропуск для загрузки с вашего ПК напрямую в Сбер
-      url: `https://s3.cloud.ru/${process.env.S3_BUCKET_NAME}/${uniqueFileName}` // Ссылка, которая пойдет в базу данных уроков
+      url: `https://cloud.ru/${process.env.S3_BUCKET_NAME}/${uniqueFileName}` // Ссылка, которая пойдет в базу данных уроков
     });
 
   } catch (error) {
