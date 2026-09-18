@@ -5,16 +5,13 @@ import path from 'path';
 import { getSession } from '@/lib/auth';
 
 const s3 = new S3Client({
-  region: 'ru-central1-a', // Регион для платформы Cloud.ru Evolution
+  region: 'ru-central1-a', // Регион для Cloud.ru Evolution
   endpoint: 'https://cloud.ru', 
-  forcePathStyle: true, // Правило для Evolution
+  forcePathStyle: true, // Обязательно для Evolution
   credentials: {
     accessKeyId: process.env.S3_ACCESS_KEY || '',
     secretAccessKey: process.env.S3_SECRET_KEY || '',
   },
-  // ИСПРАВЛЕНИЕ: Отключаем расчет чексумм на уровне самого клиента S3.
-  // Это гарантированно уберет параметры x-amz-checksum из подписи без ошибок TypeScript.
-  requestChecksumCalculation: "WHEN_SUPPORTED", 
 });
 
 export async function POST(request: NextRequest) {
@@ -36,14 +33,21 @@ export async function POST(request: NextRequest) {
       ContentType: filetype || 'video/mp4',
     });
 
-    // Генерируем пропуск для прямой загрузки со сроком действия 1 час
-    // ИСПРАВЛЕНИЕ: Оставляем только валидный для TypeScript параметр expiresIn
-    const uploadUrl = await getSignedUrl(s3, command, { expiresIn: 3600 });
+    // Генерируем стандартную пресайнед-ссылку (принимает строго expiresIn)
+    const rawUploadUrl = await getSignedUrl(s3, command, { expiresIn: 3600 });
+
+    // ЖЕЛЕЗОБЕТОННЫЙ ПАТЧ ДЛЯ СОВМЕСТИМОСТИ С CLOUD.RU EVOLUTION:
+    // 1. Принудительно заменяем базовый домен cloud.ru на s3.cloud.ru
+    // 2. Полностью вырезаем параметры чексумм (crc32), которые ломают CORS на стороне Cloud.ru
+    const cleanUploadUrl = rawUploadUrl
+      .replace('https://cloud.ru', 'https://cloud.ru')
+      .replace(/&x-amz-checksum-[^&]*/g, '')
+      .replace(/&x-amz-sdk-checksum-[^&]*/g, '');
 
     return NextResponse.json({
       success: true,
-      uploadUrl, // Ссылка-пропуск для загрузки с вашего ПК напрямую в Сбер
-      url: `https://cloud.ru/${process.env.S3_BUCKET_NAME}/${uniqueFileName}` // Ссылка, которая пойдет в базу данных уроков
+      uploadUrl: cleanUploadUrl, // Чистая, рабочая ссылка-пропуск для фронтенда
+      url: `https://cloud.ru/${process.env.S3_BUCKET_NAME}/${uniqueFileName}` // Ссылка для сохранения в БД уроков
     });
 
   } catch (error) {
