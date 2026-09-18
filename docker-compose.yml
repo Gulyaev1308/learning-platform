@@ -4,14 +4,14 @@ services:
     image: postgres:15-alpine
     container_name: learning-postgres
     environment:
-      POSTGRES_USER: ${DB_USER}
+      POSTGRES_USER: learning_admin
       POSTGRES_PASSWORD: ${DB_PASSWORD}
-      POSTGRES_DB: ${DB_NAME}
+      POSTGRES_DB: learning_platform_db
     volumes:
       - pg_data:/var/lib/postgresql/data
     restart: always
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      test: ["CMD-SHELL", "pg_isready -U learning_admin -d learning_platform_db"]
       interval: 5s
       timeout: 5s
       retries: 5
@@ -23,10 +23,11 @@ services:
     ports:
       - "80:3000"
     environment:
+      DATABASE_URL: postgresql://learning_admin:${DB_PASSWORD}@postgres-db:5432/learning_platform_db?schema=public
+      SESSION_SECRET: ${SESSION_SECRET}
       HOST: 0.0.0.0
       PORT: 3000
       NODE_OPTIONS: --trace-warnings --expose-gc
-    # Переменные DATABASE_URL и SESSION_SECRET приложение Next.js автоматически прочитает из файла .env.production, который создаст робот!
     logging:
       driver: "json-file"
       options:
@@ -36,7 +37,4 @@ services:
     depends_on:
       postgres-db:
         condition: service_healthy
-    command: sh -c "node database/init.js && node server.js"
-
-volumes:
-  pg_data:
+    # МЫ УБРАЛИ database/init.js, приложение запустится напрямую через Dockerfile (node server.js)
