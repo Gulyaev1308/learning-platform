@@ -1,11 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { S3Client } from '@aws-sdk/client-s3';
-import { Upload } from '@aws-sdk/lib-storage'; // Вернули ваш рабочий менеджер загрузки
+import { Upload } from '@aws-sdk/lib-storage';
 import { getSession } from '@/lib/auth';
 
 const s3 = new S3Client({
   region: 'ru-central-1', 
-  endpoint: 'https://cloud.ru', // Оставляем ваш исходный рабочий хост
+  endpoint: 'https://cloud.ru', 
   forcePathStyle: true, 
   credentials: {
     accessKeyId: process.env.S3_ACCESS_KEY || '',
@@ -14,7 +14,7 @@ const s3 = new S3Client({
 });
 
 export async function POST(request: NextRequest) {
-  console.log(`=== [SERVER BACKEND LOG: Получен чанк запроса] ===`);
+  console.log(`=== [SERVER BACKEND LOG: Получен легитимный FormData чанк] ===`);
   
   try {
     const session = await getSession();
@@ -22,36 +22,32 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Доступ запрещен' }, { status: 403 });
     }
 
-    // Читаем параметры из заголовков фронтенда
-    const key = request.headers.get('x-file-key');
-    const partNumber = request.headers.get('x-part-number');
+    // ВАЖНО: используем встроенный в Next.js парсер FormData ТОЛЬКО для маленького чанка (15МБ)
+    // Для 15 МБ это абсолютно безопасно и не вызывает Out of Memory!
+    const formData = await request.formData();
+    const chunk = formData.get('chunk') as Blob;
+    const key = formData.get('key') as string;
+    const partNumber = formData.get('partNumber') as string;
 
-    if (!key || !partNumber) {
-      return NextResponse.json({ error: 'Пропущены заголовки параметров файла' }, { status: 400 });
-    }
-
-    // ЛОКАЛЬНО: Превращаем тело запроса Next.js в чистый Node.js Stream
-    // Это исключает использование request.formData() и не забивает память
-    const chunkStream = request.body; 
-    if (!chunkStream) {
-      return NextResponse.json({ error: 'Тело чанка пустое' }, { status: 400 });
+    if (!chunk || !key || !partNumber) {
+      return NextResponse.json({ error: 'Пропущены параметры FormData' }, { status: 400 });
     }
 
     const chunkKey = `${key}.part${partNumber}`;
 
-    // Используем проверенный класс Upload, который не вызывает 404 на Cloud.ru
+    // Передаем поток чанка в стабильный Upload
     const s3Upload = new Upload({
       client: s3,
       params: {
         Bucket: 'mesa-edtech-media-bucket',
         Key: chunkKey,
-        Body: chunkStream, // Передаем поток напрямую в S3
+        Body: chunk.stream(), 
         ContentType: 'application/octet-stream',
       },
     });
 
     await s3Upload.done();
-    console.log(`[SERVER BACKEND] Чанк ${partNumber} успешно обработан через Upload и сохранен.`);
+    console.log(`[SERVER BACKEND] Чанк ${partNumber} успешно пропущен WAF и сохранен.`);
 
     return NextResponse.json({
       success: true,

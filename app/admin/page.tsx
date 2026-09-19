@@ -342,34 +342,38 @@ function LessonForm({ lesson, onSave, onCancel }: any) {
   }, [lesson]);
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    // ИСПРАВЛЕНО ТОЧЕЧНО: Берем именно первый файл из списка, у которого есть метод .slice
     const file = e.target.files ? e.target.files[0] : null;
     if (!file) return;
     setUploading(true);
 
     try {
-      console.log('=== [FRONTEND LOG: Старт бинарной загрузки] ===');
+      console.log('=== [FRONTEND LOG: Старт легитимной Multipart загрузки] ===');
+      console.log(`Файл: ${file.name}, Общий размер: ${(file.size / 1024 / 1024).toFixed(2)} MB`);
       
       const uniqueKey = `video_${Date.now()}_${file.name.replace(/[^a-zA-Z0-9.]/g, '_')}`;
-      const CHUNK_SIZE = 15 * 1024 * 1024; // Порции по 15 МБ
+      const CHUNK_SIZE = 15 * 1024 * 1024; // 15 МБ порции
       const totalChunks = Math.ceil(file.size / CHUNK_SIZE);
 
       for (let i = 0; i < totalChunks; i++) {
         const start = i * CHUNK_SIZE;
         const end = Math.min(start + CHUNK_SIZE, file.size);
+        
+        // Теперь метод .slice() вызывается корректно у объекта File
         const chunk = file.slice(start, end);
         const partNumber = i + 1;
 
         console.log(`[FRONTEND] Отправка чанка ${partNumber}/${totalChunks}...`);
 
-        // Шлем чистый бинарник и параметры в заголовках
+        // Упаковываем в стандартный FormData, который WAF не блокирует
+        const chunkFormData = new FormData();
+        chunkFormData.append('chunk', chunk);
+        chunkFormData.append('key', uniqueKey);
+        chunkFormData.append('partNumber', partNumber.toString());
+
         const chunkResponse = await fetch('/api/admin/upload', {
           method: 'POST',
-          headers: {
-            'x-file-key': uniqueKey,
-            'x-part-number': partNumber.toString(),
-            'Content-Type': 'application/octet-stream'
-          },
-          body: chunk // Передаем Blob напрямую
+          body: chunkFormData // Отправляем как FormData
         });
 
         if (!chunkResponse.ok) {
@@ -378,9 +382,8 @@ function LessonForm({ lesson, onSave, onCancel }: any) {
         }
       }
 
-      console.log('[FRONTEND] Все чанки на сервере. Запуск сборки...');
+      console.log('[FRONTEND] Все чанки загружены. Запуск сборки...');
 
-      // Запрос на финальную склейку
       const completeResponse = await fetch('/api/admin/upload/complete', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
