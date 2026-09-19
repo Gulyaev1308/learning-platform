@@ -1,13 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { S3Client, CreateMultipartUploadCommand, UploadPartCommand } from '@aws-sdk/client-s3';
-import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
+import { S3Client } from '@aws-sdk/client-s3';
+import { Upload } from '@aws-sdk/lib-storage';
 import path from 'path';
 import { getSession } from '@/lib/auth';
 
 const s3 = new S3Client({
+  // ИСПРАВЛЕНО: Канонический регион Cloud.ru
   region: 'ru-central-1', 
-  endpoint: 'https://cloud.ru', 
-  forcePathStyle: true,
+  // ИСПРАВЛЕНО: Точный эндпоинт S3 хранилища для стриминга больших файлов
+  endpoint: 'https://s3.cloud.ru', 
+  forcePathStyle: true, 
+  requestChecksumCalculation: 'WHEN_SUPPORTED',
   credentials: {
     accessKeyId: process.env.S3_ACCESS_KEY || '',
     secretAccessKey: process.env.S3_SECRET_KEY || '',
@@ -21,63 +24,56 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Доступ запрещен' }, { status: 403 });
     }
 
-    const { fileName, fileSize } = await request.json();
+    // Принимаем Multipart Form Data с фронтенда
+    const formData = await request.formData();
+    const file = formData.get('file') as File;
     
-    if (!fileName || !fileSize) {
-      return NextResponse.json({ error: 'fileName и fileSize обязательны' }, { status: 400 });
+    if (!file) {
+      return NextResponse.json({ error: 'Файл не найден в запросе' }, { status: 400 });
     }
 
-    const ext = path.extname(fileName).toLowerCase() || '.mp4';
+    console.log(`=== [SERVER LOG: START UPLOAD] ===`);
+    console.log(`Файл: ${file.name}, Размер: ${(file.size / 1024 / 1024).toFixed(2)} MB`);
+
+    const ext = path.extname(file.name).toLowerCase() || '.mp4';
     const uniqueFileName = `video_${Date.now()}${ext}`;
-    
-    // ИСПРАВЛЕНО: Жёстко фиксируем валидный MIME-тип. 
-    // Cloud.ru сбрасывает Multipart сессию в 500, если тип некорректный.
     const contentType = ext === '.mp4' ? 'video/mp4' : 'application/octet-stream';
 
-    // 1. Инициализируем сессию многокомпонентной загрузки
-    const createCommand = new CreateMultipartUploadCommand({
-      Bucket: 'mesa-edtech-media-bucket',
-      Key: uniqueFileName,
-      ContentType: contentType, // Важнейший заголовок для Cloud.ru
-    });
-    
-    const { UploadId } = await s3.send(createCommand);
-
-    if (!UploadId) {
-      throw new Error('Не удалось получить сессию загрузки (UploadId) от Cloud.ru');
-    }
-
-    // Устанавливаем размер чанка 10 МБ
-    const PART_SIZE = 10 * 1024 * 1024; 
-    const totalParts = Math.ceil(fileSize / PART_SIZE);
-    const urls: string[] = [];
-
-    // 2. Генерируем подписанную PUT-ссылку для каждого отдельного чанка
-    for (let partNumber = 1; partNumber <= totalParts; partNumber++) {
-      const partCommand = new UploadPartCommand({
+    // Встроенный менеджер чанков AWS SDK: сам бьет файл по 10 МБ и отправляет в 4 параллельных потока
+    const parallelUploads3 = new Upload({
+      client: s3,
+      params: {
         Bucket: 'mesa-edtech-media-bucket',
         Key: uniqueFileName,
-        UploadId: UploadId,
-        PartNumber: partNumber,
-      });
-      // Подписываем только URL, Cloud.ru сам сопоставит чанки по номеру
-      const url = await getSignedUrl(s3, partCommand, { expiresIn: 3600 });
-      urls.push(url);
-    }
+        Body: file.stream(), // Стримим поток файла без раздувания RAM сервера
+        ContentType: contentType,
+      },
+      queueSize: 4, 
+      partSize: 1024 * 1024 * 10, // Размер чанка — 10 MB
+      leavePartsOnError: false, 
+    });
 
-    const fileViewUrl = `https://cloud.ru/mesa-edtech-media-bucket/${uniqueFileName}`;
+    // Мониторинг отправки чанков в консоли сервера
+    parallelUploads3.on('httpUploadProgress', (progress) => {
+      console.log(`[SERVER S3 PROGRESS] Часть: ${progress.part}, Отправлено: ${progress.loaded} из ${progress.total}`);
+    });
+
+    // Запускаем процесс и ждем ответа от Cloud.ru о завершении сборки
+    await parallelUploads3.done();
+    
+    console.log(`=== [SERVER LOG: SUCCESS] ===`);
+    
+    // ИСПРАВЛЕНО: Корректная итоговая ссылка для просмотра
+    const fileViewUrl = `https://s3.cloud.ru/mesa-edtech-media-bucket/${uniqueFileName}`;
 
     return NextResponse.json({
       success: true,
-      uploadId: UploadId,
-      key: uniqueFileName,
-      urls: urls,
-      partSize: PART_SIZE,
-      url: fileViewUrl
+      url: fileViewUrl       
     });
 
   } catch (error) {
-    console.error('Ошибка на бэкенде S3:', error);
+    console.error(`=== [SERVER LOG: ERROR] ===`);
+    console.error('Критическая ошибка при стриминге в Cloud.ru:', error);
     return NextResponse.json({ error: 'Ошибка S3: ' + (error as Error).message }, { status: 500 });
   }
 }

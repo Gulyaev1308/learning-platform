@@ -347,78 +347,37 @@ function LessonForm({ lesson, onSave, onCancel }: any) {
     setUploading(true);
 
     try {
-      console.log(`=== START CHUNKED UPLOAD ===`);
-      console.log(`Файл: ${file.name}, Размер: ${(file.size / 1024 / 1024).toFixed(2)} MB`);
+      console.log('=== [FRONTEND LOG: Начало отправки] ===');
+      
+      const formDataToSend = new FormData();
+      formDataToSend.append('file', file);
 
-      // Шаг 1: Сообщаем бэкенду размер файла и получаем массив ссылок для чанков
-      const initResponse = await fetch('/api/admin/upload', {
+      // Отправляем файл на наш обновленный бэкенд Next.js
+      const response = await fetch('/api/admin/upload', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ fileName: file.name, fileSize: file.size }),
+        body: formDataToSend, // Передаем как FormData, чтобы бэкенд поймал file.stream()
       });
       
-      const initData = await initResponse.json();
-      if (!initResponse.ok) throw new Error(initData.error || 'Не удалось инициализировать загрузку');
+      const data = await response.json();
 
-      const { uploadId, key, urls, partSize, url } = initData;
-      const uploadedParts: { ETag: string; PartNumber: number }[] = [];
-
-      // Шаг 2: Последовательно нарезаем файл и отправляем чанки напрямую в S3 Cloud.ru
-      for (let i = 0; i < urls.length; i++) {
-        const start = i * partSize;
-        const end = Math.min(start + partSize, file.size);
-        const chunk = file.slice(start, end);
-        const partNumber = i + 1;
-
-        console.log(`Загрузка чанка ${partNumber}/${urls.length}...`);
-
-        const uploadResponse = await fetch(urls[i], {
-          method: 'PUT',
-          body: chunk,
-        });
-
-        if (!uploadResponse.ok) {
-          throw new Error(`Ошибка при загрузке чанка №${partNumber}`);
-        }
-
-        // Каждому загруженному чанку S3 присваивает маркер ETag, он обязателен для сборки
-        const etag = uploadResponse.headers.get('ETag');
-        if (!etag) throw new Error(`Не получен ETag для чанка №${partNumber}`);
-
-        uploadedParts.push({
-          ETag: etag.replace(/"/g, ''), // Очищаем кавычки в ETag, если они есть
-          PartNumber: partNumber,
-        });
-
-        const progressPercent = ((end / file.size) * 100).toFixed(1);
-        console.log(`[PROGRESS] Загружено: ${progressPercent}%`);
+      if (!response.ok) {
+        throw new Error(data.error || 'Не удалось загрузить файл на сервер');
       }
 
-      // Шаг 3: Отправляем запрос на бэкенд для финальной склейки всех чанков в один файл
-      console.log('Сборка файла на стороне Cloud.ru...');
-      const completeResponse = await fetch('/api/admin/upload/complete', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ uploadId, key, parts: uploadedParts }),
-      });
+      console.log('=== [FRONTEND LOG: Успешно] ===', data.url);
 
-      const completeData = await completeResponse.json();
-      if (!completeResponse.ok) throw new Error(completeData.error || 'Ошибка сборки файла');
-
-      console.log('=== UPLOAD SUCCESS ===');
-
-      // Ваша оригинальная логика обновления стейтов
+      // Ваша оригинальная логика распределения контента в стейты
       if (formData.type === 'case') {
-        setCaseImages(prev => [...prev, url]);
+        setCaseImages(prev => [...prev, data.url]);
       } else {
-        setFormData({ ...formData, content: url });
+        setFormData({ ...formData, content: data.url });
       }
 
-      alert('Видео успешно нарезано, загружено и склеено в облаке!');
-
+      alert('Файл успешно загружен по частям (Multipart)!');
+      
     } catch (error) {
-      console.error('Ошибка загрузки:', error);
-      alert((error as Error).message || 'Ошибка при чанговой загрузке');
+      console.error(error);
+      alert((error as Error).message || 'Ошибка загрузки файла');
     } finally {
       setUploading(false);
     }
