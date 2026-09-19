@@ -358,22 +358,29 @@ function LessonForm({ lesson, onSave, onCancel }: any) {
         throw new Error(data.error || 'Не удалось получить ссылку');
       }
 
-      // Отправляем PUT запрос в S3 Cloud.ru
-      const uploadToS3 = await fetch(data.uploadUrl, {
-        method: 'PUT',
+      // НАЧАЛО БЛОКА ОТЛАДКИ
+      // Отправляем запрос через прокси-сервер Next.js, чтобы обойти ограничения браузера 
+      // и прочитать реальный текст ошибки 400 Bad Request от Cloud.ru
+      console.log('Запуск диагностики S3 запроса...');
+      const uploadToS3 = await fetch('/api/admin/debug-upload', {
+        method: 'OPTIONS', 
         headers: {
-          // ИСПРАВЛЕНО: Берём тип строго из бэкенда (data.contentType), 
-          // чтобы заголовки со стороны клиента совпали с подписью AWS SDK на 100%
+          'x-debug-target-url': data.uploadUrl,
           'Content-Type': data.contentType,
         },
-        // ИСПРАВЛЕНО: Передаем файл напрямую (Blob/File). Для метода PUT в S3 
-        // не нужно делать .arrayBuffer(), браузер сам эффективно отправит бинарные данные
-        body: file,
       });
 
+      const debugText = await uploadToS3.text();
+      
+      console.log('=== ДИАГНОСТИЧЕСКИЙ ОТВЕТ СЕРВЕРА CLOUD.RU ===');
+      console.log(debugText);
+      console.log('==============================================');
+
       if (!uploadToS3.ok) {
-        throw new Error('Облако S3 отклонило загрузку файла');
+        // Выводим сырой XML ответа прямо в текст ошибки
+        throw new Error(`Облако S3 отклонило загрузку. Ответ сервера: ${debugText || 'пусто'}`);
       }
+      // КОНЕЦ БЛОКА ОТЛАДКИ
       
       // Полностью сохраняем твою логику распределения контента в стейты
       if (formData.type === 'case') {
@@ -383,6 +390,7 @@ function LessonForm({ lesson, onSave, onCancel }: any) {
       }
       
     } catch (error) {
+      // Здесь отобразится детальный XML-код ошибки
       alert((error as Error).message || 'Ошибка загрузки');
     } finally {
       setUploading(false);
