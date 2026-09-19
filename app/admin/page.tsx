@@ -342,67 +342,46 @@ function LessonForm({ lesson, onSave, onCancel }: any) {
   }, [lesson]);
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    // ИСПРАВЛЕНО ТОЧЕЧНО: Берем именно первый файл из списка, у которого есть метод .slice
     const file = e.target.files ? e.target.files[0] : null;
     if (!file) return;
     setUploading(true);
 
     try {
-      console.log('=== [FRONTEND LOG: Старт легитимной Multipart загрузки] ===');
-      console.log(`Файл: ${file.name}, Общий размер: ${(file.size / 1024 / 1024).toFixed(2)} MB`);
+      console.log('=== [FRONTEND LOG: Получение Presigned URL] ===');
+
+      // 1. Получаем прямую ссылку у нашего бэкенда
+      const response = await fetch(`/api/admin/upload?fileName=${encodeURIComponent(file.name)}`, {
+        method: 'GET'
+      });
       
-      const uniqueKey = `video_${Date.now()}_${file.name.replace(/[^a-zA-Z0-9.]/g, '_')}`;
-      const CHUNK_SIZE = 15 * 1024 * 1024; // 15 МБ порции
-      const totalChunks = Math.ceil(file.size / CHUNK_SIZE);
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Не удалось получить ссылку для загрузки');
 
-      for (let i = 0; i < totalChunks; i++) {
-        const start = i * CHUNK_SIZE;
-        const end = Math.min(start + CHUNK_SIZE, file.size);
-        
-        // Теперь метод .slice() вызывается корректно у объекта File
-        const chunk = file.slice(start, end);
-        const partNumber = i + 1;
+      console.log('=== [FRONTEND LOG: Прямая загрузка в Cloud.ru S3] ===');
 
-        console.log(`[FRONTEND] Отправка чанка ${partNumber}/${totalChunks}...`);
-
-        // Упаковываем в стандартный FormData, который WAF не блокирует
-        const chunkFormData = new FormData();
-        chunkFormData.append('chunk', chunk);
-        chunkFormData.append('key', uniqueKey);
-        chunkFormData.append('partNumber', partNumber.toString());
-
-        const chunkResponse = await fetch('/api/admin/upload', {
-          method: 'POST',
-          body: chunkFormData // Отправляем как FormData
-        });
-
-        if (!chunkResponse.ok) {
-          const chunkData = await chunkResponse.json();
-          throw new Error(chunkData.error || `Ошибка чанка №${partNumber}`);
-        }
-      }
-
-      console.log('[FRONTEND] Все чанки загружены. Запуск сборки...');
-
-      const completeResponse = await fetch('/api/admin/upload/complete', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          key: uniqueKey,
-          totalChunks,
-        }),
+      // 2. Отправляем файл НАПРЯМУЮ в Cloud.ru S3 через обычный PUT запрос
+      const uploadResponse = await fetch(data.uploadUrl, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': file.type || 'video/mp4',
+        },
+        body: file // Передаем весь файл, браузер сам стримит его в облако
       });
 
-      const data = await completeResponse.json();
-      if (!completeResponse.ok) throw new Error(data.error || 'Ошибка сборки файла');
-
-      if (formData.type === 'case') {
-        setCaseImages(prev => [...prev, data.url]);
-      } else {
-        setFormData({ ...formData, content: data.url });
+      if (!uploadResponse.ok) {
+        throw new Error('WAF или S3 отклонил прямую загрузку файла');
       }
 
-      alert('Файл успешно загружен!');
+      console.log('=== [FRONTEND LOG: Успешно загружено напрямую] ===', data.fileUrl);
+
+      // Ваша оригинальная логика распределения контента в стейты
+      if (formData.type === 'case') {
+        setCaseImages(prev => [...prev, data.fileUrl]);
+      } else {
+        setFormData({ ...formData, content: data.fileUrl });
+      }
+
+      alert('Файл успешно загружен напрямую в облако!');
       
     } catch (error) {
       console.error(error);
