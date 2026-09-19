@@ -4,11 +4,11 @@ import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import path from 'path';
 import { getSession } from '@/lib/auth';
 
-// Инициализация S3 клиента с корректным эндпоинтом Cloud.ru
+// Инициализация S3 клиента с корректным и доступным в DNS эндпоинтом Cloud.ru
 const s3 = new S3Client({
   region: 'ru-central1', 
-  endpoint: 'https://s3.evolution.cloud.ru', // ИСПРАВЛЕНО
-  forcePathStyle: true, // Обязательно для Cloud.ru
+  endpoint: 'https://s3.cloud.ru', // ИСПРАВЛЕНО: Правильный домен Object Storage
+  forcePathStyle: true, // Обязательно для Cloud.ru, чтобы бакет шел в пути URL
   credentials: {
     accessKeyId: process.env.S3_ACCESS_KEY || '',
     secretAccessKey: process.env.S3_SECRET_KEY || '',
@@ -17,7 +17,7 @@ const s3 = new S3Client({
 
 export async function POST(request: NextRequest) {
   try {
-    // Сохраняем твою проверку прав авторизации
+    // Сохраняем твою проверку прав авторизации администратора
     const session = await getSession();
     if (!session || session.role !== 'admin') {
       return NextResponse.json({ error: 'Доступ запрещен' }, { status: 403 });
@@ -39,7 +39,7 @@ export async function POST(request: NextRequest) {
     const uploadUrl = await getSignedUrl(s3, command, { expiresIn: 3600 });
     
     // Чистый URL для последующего сохранения в Базу Данных (для просмотра видео учениками)
-    const fileViewUrl = `https://s3.evolution.cloud.ru/mesa-edtech-media-bucket/${uniqueFileName}`;
+    const fileViewUrl = `https://s3.cloud.ru/mesa-edtech-media-bucket/${uniqueFileName}`; // ИСПРАВЛЕНО
 
     return NextResponse.json({
       success: true,
