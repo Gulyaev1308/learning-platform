@@ -358,39 +358,28 @@ function LessonForm({ lesson, onSave, onCancel }: any) {
         throw new Error(data.error || 'Не удалось получить ссылку');
       }
 
-      // НАЧАЛО БЛОКА ОТЛАДКИ
-      // Отправляем запрос через прокси-сервер Next.js, чтобы обойти ограничения браузера 
-      // и прочитать реальный текст ошибки 400 Bad Request от Cloud.ru
-      console.log('Запуск диагностики S3 запроса...');
-      const uploadToS3 = await fetch('/api/admin/debug-upload', {
-        method: 'OPTIONS', 
+      // Отправляем PUT запрос напрямую в S3 Cloud.ru с валидными параметрами региона
+      const uploadToS3 = await fetch(data.uploadUrl, {
+        method: 'PUT',
         headers: {
-          'x-debug-target-url': data.uploadUrl,
           'Content-Type': data.contentType,
         },
+        body: file,
       });
 
-      const debugText = await uploadToS3.text();
-      
-      console.log('=== ДИАГНОСТИЧЕСКИЙ ОТВЕТ СЕРВЕРА CLOUD.RU ===');
-      console.log(debugText);
-      console.log('==============================================');
-
       if (!uploadToS3.ok) {
-        // Выводим сырой XML ответа прямо в текст ошибки
-        throw new Error(`Облако S3 отклонило загрузку. Ответ сервера: ${debugText || 'пусто'}`);
+        throw new Error('Облако S3 отклонило загрузку файла');
       }
-      // КОНЕЦ БЛОКА ОТЛАДКИ
       
-      // Полностью сохраняем твою логику распределения контента в стейты
       if (formData.type === 'case') {
         setCaseImages(prev => [...prev, data.url]);
       } else {
         setFormData({ ...formData, content: data.url });
       }
       
+      alert('Видео успешно загружено!');
+      
     } catch (error) {
-      // Здесь отобразится детальный XML-код ошибки
       alert((error as Error).message || 'Ошибка загрузки');
     } finally {
       setUploading(false);

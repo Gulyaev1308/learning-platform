@@ -5,10 +5,10 @@ import path from 'path';
 import { getSession } from '@/lib/auth';
 
 const s3 = new S3Client({
-  region: 'ru-central1', 
-  endpoint: 'https://s3.cloud.ru', // Базовый эндпоинт Cloud.ru
-  forcePathStyle: true,            // ВОЗВРАЩАЕМ TRUE: Cloud.ru работает через path-style URL
-  requestChecksumCalculation: 'WHEN_REQUIRED', 
+  // ИСПРАВЛЕНО: Добавлен второй дефис. Строго 'ru-central-1', как требует Cloud.ru
+  region: 'ru-central-1', 
+  endpoint: 'https://cloud.ru', 
+  forcePathStyle: true, 
   credentials: {
     accessKeyId: process.env.S3_ACCESS_KEY || '',
     secretAccessKey: process.env.S3_SECRET_KEY || '',
@@ -23,32 +23,22 @@ export async function POST(request: NextRequest) {
     }
 
     const { fileName } = await request.json();
-
     const ext = path.extname(fileName).toLowerCase() || '.mp4';
     const uniqueFileName = `video_${Date.now()}${ext}`;
-
     const contentType = ext === '.mp4' ? 'video/mp4' : 'application/octet-stream';
 
     const command = new PutObjectCommand({
       Bucket: 'mesa-edtech-media-bucket',
       Key: uniqueFileName,
-      ContentType: contentType, 
+      ContentType: contentType,
     });
 
-    // Генерируем ссылку со специальным флагом для CORS-совместимости Cloud.ru
-    const uploadUrl = await getSignedUrl(s3, command, { 
-      expiresIn: 3600,
-      // КРИТИЧЕСКИ ВАЖНО ДЛЯ CLOUD.RU: Говорим SDK не подписывать кастомные заголовки для preflight-запроса OPTIONS. 
-      // Это предотвратит ошибку 400 Bad Request от балансировщика Cloud.ru.
-      signableHeaders: new Set([]), 
-    });
-    
-    // Публичная ссылка для сохранения в БД
-    const fileViewUrl = `https://cloud.ru{uniqueFileName}`;
+    const uploadUrl = await getSignedUrl(s3, command, { expiresIn: 3600 });
+    const fileViewUrl = `https://cloud.ru/mesa-edtech-media-bucket/${uniqueFileName}`;
 
     return NextResponse.json({
       success: true,
-      uploadUrl: uploadUrl,     // Будет иметь стабильный вид: https://cloud.ru...
+      uploadUrl: uploadUrl,     
       contentType: contentType, 
       url: fileViewUrl       
     });
