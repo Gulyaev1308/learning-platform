@@ -350,13 +350,13 @@ function LessonForm({ lesson, onSave, onCancel }: any) {
       console.log('=== [FRONTEND LOG: Начало прямой потоковой отправки] ===');
       
       // Отправляем файл как чистый бинарный поток без FormData упаковки
-      const response = await fetch('/api/admin/upload', {
+      const response = await fetch('/api/admin/raw-upload', {
         method: 'POST',
         headers: {
           'x-file-name': encodeURIComponent(file.name),
           'Content-Type': file.type || 'video/mp4',
         },
-        body: file, // Передаем объект файла напрямую, браузер сам превратит его в поток
+        body: file,
       });
       
       const data = await response.json();
