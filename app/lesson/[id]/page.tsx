@@ -5,7 +5,10 @@ import { useRouter, useParams } from 'next/navigation';
 
 export default function LessonPage() {
   const router = useRouter();
-  const { id: lessonId } = useParams();
+  
+  // ИСПРАВЛЕНО СТРОГО ПО СТАНДАРТАМ TS: Явная безопасная типизация динамического параметра
+  const params = useParams();
+  const lessonId = params ? (params.id as string) : '';
   
   const [lesson, setLesson] = useState<any>(null);
   const [quizContent, setQuizContent] = useState<any>(null);
@@ -67,11 +70,9 @@ export default function LessonPage() {
   const hasVideo = lesson.type === 'video' && lesson.content;
   const isActionAvailable = !hasVideo || videoEnded;
 
-  // НОРМАЛИЗАТОР ПУТИ: Очищает строку от дублирования api/videos
   let videoSrc = '';
   if (hasVideo) {
     let cleanContent = lesson.content.trim();
-    // Извлекаем только имя файла, убирая любые префиксы
     const fileName = cleanContent.split('/').pop();
     videoSrc = `/api/videos/${fileName}`;
   }
@@ -105,7 +106,7 @@ export default function LessonPage() {
               <>
                 <h2 className="text-lg font-semibold text-blue-900 flex items-center gap-2">
                   📋 Тест / Опрос к уроку: 
-                  {!isActionAvailable && <span className="text-xs text-amber-700 bg-amber-100 px-3 py-1 rounded-full ml-2 font-medium">Доступно после просмотра видео</span>}
+                  {!isActionAvailable && <span className="text-xs text-amber-700 bg-amber-100 px-3 py-1 rounded-full ml-2 font-medium">Доступно после просмотра video</span>}
                 </h2>
                 {isActionAvailable && quizContent.questions.map((q: any, i: number) => (
                   <div key={i} className="bg-white p-4 rounded-xl border border-gray-200">
