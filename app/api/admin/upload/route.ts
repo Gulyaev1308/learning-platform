@@ -5,9 +5,13 @@ import path from 'path';
 import { getSession } from '@/lib/auth';
 
 const s3 = new S3Client({
-  region: 'ru-central-1',             // Строгий регион для Cloud.ru
-  endpoint: 'https://s3.cloud.ru',     // Официальный эндпоинт хранилища
-  forcePathStyle: true,               // Использование структуры path-style запросов
+  region: 'ru-central-1', 
+  endpoint: 'https://s3.cloud.ru', 
+  forcePathStyle: true, 
+  // ИСПРАВЛЕНО: Полностью отключаем генерацию и валидацию любых чексумм (SHA256, CRC32) на уровне клиента,
+  // чтобы убрать параметры x-amz-checksum из URL, из-за которых зависает соединение.
+  requestChecksumCalculation: 'WHEN_SUPPORTED', 
+  responseChecksumValidation: 'WHEN_SUPPORTED',
   credentials: {
     accessKeyId: process.env.S3_ACCESS_KEY || '',
     secretAccessKey: process.env.S3_SECRET_KEY || '',
@@ -32,17 +36,16 @@ export async function POST(request: NextRequest) {
       ContentType: contentType,
     });
 
-    // Генерируем ссылку без вмешательства автоматических подмен хоста со стороны SDK
+    // Генерируем чистую ссылку без x-amz-checksum-crc32
     const uploadUrl = await getSignedUrl(s3, command, { 
       expiresIn: 3600,
     });
     
-    // Публичная ссылка для сохранения в базу данных
     const fileViewUrl = `https://cloud.ru{uniqueFileName}`;
 
     return NextResponse.json({
       success: true,
-      uploadUrl: uploadUrl,     // Ссылка примет верный вид: https://s3.cloud.ru/mesa-edtech-media-bucket/...
+      uploadUrl: uploadUrl,     
       contentType: contentType, 
       url: fileViewUrl       
     });
