@@ -346,7 +346,7 @@ function LessonForm({ lesson, onSave, onCancel }: any) {
     if (!file) return;
     setUploading(true);
     try {
-      setUploading(true);
+      // Убрали дублирующий стейт setUploading(true)
 
       const response = await fetch('/api/admin/upload', {
         method: 'POST',
@@ -360,11 +360,16 @@ function LessonForm({ lesson, onSave, onCancel }: any) {
         throw new Error(data.error || 'Не удалось получить ссылку');
       }
 
-      // Переводим в ArrayBuffer, чтобы fetch шел БЕЗ автоматических Content-Type заголовков
+      // Переводим в ArrayBuffer для чистой бинарной передачи
       const arrayBuffer = await file.arrayBuffer();
 
+      // Отправляем PUT запрос в S3 Cloud.ru с обязательным Content-Type заголовком
       const uploadToS3 = await fetch(data.uploadUrl, {
         method: 'PUT',
+        headers: {
+          // ИСПРАВЛЕНО: Явно передаем тип (например video/mp4), чтобы S3 принял сигнатуру подписи
+          'Content-Type': file.type || 'video/mp4',
+        },
         body: arrayBuffer,
       });
 
@@ -372,6 +377,7 @@ function LessonForm({ lesson, onSave, onCancel }: any) {
         throw new Error('Облако S3 отклонило загрузку файла');
       }
       
+      // Полностью сохраняем твою логику распределения контента в стейты
       if (formData.type === 'case') {
         setCaseImages(prev => [...prev, data.url]);
       } else {
