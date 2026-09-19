@@ -346,40 +346,66 @@ function LessonForm({ lesson, onSave, onCancel }: any) {
   const [uploadedFileUrl, setUploadedFileUrl] = useState<string>(''); 
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files ? e.target.files[0] : null;
+    const file = e.target.files ? e.target.files[0] : null; // Строго первый файл
     if (!file) return;
     setUploading(true);
 
+    // Создаем стандартный контроллер отмены
     const controller = new AbortController();
     setAbortController(controller);
 
     try {
-      console.log('=== [FRONTEND LOG: Шаг 1 — Запрос подписанной ссылки у бэкенда] ===');
+      console.log('=== [FRONTEND LOG: Шаг 1 — Запрос подписанной ссылки] ===');
 
-      // Делаем легкий GET-запрос на получение персональной ссылки для загрузки
       const response = await fetch(`/api/admin/upload?fileName=${encodeURIComponent(file.name)}`, {
-        method: 'GET',
-        signal: controller.signal
+        method: 'GET'
       });
       
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || 'Не удалось сгенерировать ссылку');
 
-      console.log('=== [FRONTEND LOG: Шаг 2 — Прямая трансляция файла сокетом в S3] ===');
+      console.log('=== [FRONTEND LOG: Шаг 2 — Прямая трансляция в S3 с мониторингом] ===');
 
-      // Отправляем файл НАПРЯМУЮ на сервера хранения Cloud.ru Evolution S3
-      const uploadResponse = await fetch(data.uploadUrl, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': file.type || 'video/mp4',
-        },
-        body: file, // Браузер стримит гигабайт напрямую в хранилище, минуя твой докер
-        signal: controller.signal,
+      const xhr = new XMLHttpRequest();
+
+      // СВЯЗУЮЩИЙ МОСТ: Принудительно обрываем XHR, если сработал триггер AbortController
+      controller.signal.addEventListener('abort', () => {
+        xhr.abort();
       });
 
-      if (!uploadResponse.ok) {
-        throw new Error('Cloud.ru S3 отклонил прямую загрузку потока. Проверьте CORS настройки бакета.');
-      }
+      // НАСТРОЙКА РЕАЛЬНОГО ПРОГРЕСС-БАРА В КОНСОЛИ БРАУЗЕРА
+      xhr.upload.onprogress = (event) => {
+        if (event.lengthComputable) {
+          const percentComplete = ((event.loaded / event.total) * 100).toFixed(2);
+          const loadedMB = (event.loaded / 1024 / 1024).toFixed(2);
+          const totalMB = (event.total / 1024 / 1024).toFixed(2);
+          
+          console.log(`[PROGRESSBAR] Загрузка: ${percentComplete}% (${loadedMB} MB из ${totalMB} MB)`);
+        }
+      };
+
+      const uploadPromise = () => new Promise((resolve, reject) => {
+        xhr.open('PUT', data.uploadUrl, true);
+        xhr.setRequestHeader('Content-Type', file.type || 'video/mp4');
+
+        xhr.onload = () => {
+          if (xhr.status >= 200 && xhr.status < 300) {
+            resolve(xhr.response);
+          } else {
+            reject(new Error(`S3 отклонил загрузку, статус: ${xhr.status}`));
+          }
+        };
+
+        xhr.onerror = () => reject(new Error('Сетевая ошибка при загрузке в S3.'));
+        xhr.onabort = () => {
+          console.log('=== [FRONTEND LOG: Сетевой поток принудительно остановлен сокетом] ===');
+          reject(new Error('AbortError'));
+        };
+
+        xhr.send(file);
+      });
+
+      await uploadPromise();
 
       console.log('=== [FRONTEND LOG: Успешно доставлено в S3] ===', data.fileUrl);
       setUploadedFileUrl(data.fileUrl); 
@@ -390,12 +416,11 @@ function LessonForm({ lesson, onSave, onCancel }: any) {
         setFormData({ ...formData, content: data.fileUrl });
       }
 
-      alert('Файл успешно сохранен напрямую в облако! Нажмите "Сохранить" в форме.');
+      alert('Файл успешно загружен напрямую в облако! Нажмите "Сохранить" в форме, чтобы зафиксировать изменения.');
       
     } catch (error: any) {
-      if (error.name === 'AbortError') {
-        console.log('=== [FRONTEND LOG: Сетевой поток остановлен пользователем] ===');
-        alert('Загрузка остановлена.');
+      if (error.message === 'AbortError' || error.name === 'AbortError') {
+        alert('Загрузка видео успешно остановлена.');
       } else {
         console.error(error);
         alert(error.message || 'Ошибка отправки файла');
@@ -407,25 +432,32 @@ function LessonForm({ lesson, onSave, onCancel }: any) {
   };
 
   const handleCancelUploadOrForm = async () => {
+    // 1. Мгновенно вызываем метод отмены на стандартном AbortController
     if (abortController) {
       abortController.abort();
     }
 
+    // 2. Если видео успело загрузиться, но админ нажал «Отмена» в форме
     if (uploadedFileUrl) {
       console.log('[CLEANUP] Удаляем несохраненный ролик из S3...');
       try {
-        await fetch('/api/admin/upload', {
+        const delRes = await fetch('/api/admin/upload', {
           method: 'DELETE',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ fileUrl: uploadedFileUrl }),
         });
+        
+        if (delRes.ok) {
+          console.log('[CLEANUP SUCCESS] Файл успешно вычищен из хранилища Cloud.ru');
+        }
       } catch (err) {
-        console.error('Не удалось очистить неиспользованный файл:', err);
+        console.error('Не удалось очистить неиспользованный файл из S3:', err);
       } finally {
-        setUploadedFileUrl(''); // ИСПРАВЛЕНО: Теперь корректно вызывается функция-сеттер стейта
+        setUploadedFileUrl(''); 
       }
     }
 
+    // 3. Вызываем вашу оригинальную функцию закрытия модалки
     if (typeof onCancel === 'function') {
       onCancel();
     }
