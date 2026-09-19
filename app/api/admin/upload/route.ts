@@ -4,7 +4,7 @@ import { getSession } from '@/lib/auth';
 
 const s3 = new S3Client({
   region: 'ru-central-1', 
-  endpoint: 'https://cloud.ru', 
+  endpoint: 'https://cloud.ru', // ИСПРАВЛЕНО ТОЧНО: Вернули оригинальный эндпоинт из вашего рабочего конфига
   forcePathStyle: true, 
   credentials: {
     accessKeyId: process.env.S3_ACCESS_KEY || '',
