@@ -4,11 +4,12 @@ import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import path from 'path';
 import { getSession } from '@/lib/auth';
 
-// Инициализация S3 клиента в режиме Virtual-Hosted Style для Cloud.ru
+// Конфигурация S3 клиента с региональным эндпоинтом Cloud.ru
 const s3 = new S3Client({
   region: 'ru-central1', 
-  endpoint: 'https://s3.cloud.ru', 
-  forcePathStyle: false, // ИСПРАВЛЕНО: переключаем на доменный стиль бакетов (bucket.s3.cloud.ru)
+  // ИСПРАВЛЕНО: Добавлен регион в поддомен, чтобы балансировщик Cloud.ru корректно обрабатывал OPTIONS
+  endpoint: 'https://cloud.ru', 
+  forcePathStyle: false, // Оставляем Virtual-Hosted для корректной маршрутизации поддоменов
   requestChecksumCalculation: 'WHEN_REQUIRED', 
   credentials: {
     accessKeyId: process.env.S3_ACCESS_KEY || '',
@@ -36,11 +37,11 @@ export async function POST(request: NextRequest) {
       ContentType: ext === '.mp4' ? 'video/mp4' : 'application/octet-stream', 
     });
 
-    // Генерирует ссылку вида: https://mesa-edtech-media-bucket.s3.cloud.ru/...
+    // Ссылка примет вид: https://cloud.ru...
     const uploadUrl = await getSignedUrl(s3, command, { expiresIn: 3600 });
     
-    // Ссылка для сохранения в БД в формате Virtual-Hosted
-    const fileViewUrl = `https://cloud.ru{uniqueFileName}`;
+    // Чистая ссылка для записи в БД
+    const fileViewUrl = `https://cloud.ru${uniqueFileName}`;
 
     return NextResponse.json({
       success: true,
