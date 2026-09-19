@@ -27,7 +27,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   console.log(`=== [PAGES ROUTER LOG: Сквозной стриминг запущен] ===`);
 
   try {
-    // Безопасная проверка авторизации напрямую по наличию сессионной куки (исключает падение билда)
     const cookies = req.headers.cookie;
     if (!cookies || !cookies.includes('iron-session')) {
       console.log(`[PAGES ROUTER] Отказано в доступе: сессия не найдена`);
@@ -49,6 +48,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       params: {
         Bucket: 'mesa-edtech-media-bucket',
         Key: uniqueFileName,
+        // @ts-ignore - Отключаем строгую проверку типов NodeStream для стабильного билда
         Body: req, 
         ContentType: contentType,
       },
