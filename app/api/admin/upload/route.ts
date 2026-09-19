@@ -6,10 +6,8 @@ import { getSession } from '@/lib/auth';
 
 const s3 = new S3Client({
   region: 'ru-central1', 
-  endpoint: 'https://s3.cloud.ru', 
-  // ИСПРАВЛЕНО: Отключаем forcePathStyle. SDK автоматически создаст правильный 
-  // Virtual-Hosted URL (с бакетом в поддомене), который требует Cloud.ru для OPTIONS/CORS
-  forcePathStyle: false, 
+  endpoint: 'https://s3.cloud.ru', // Базовый эндпоинт Cloud.ru
+  forcePathStyle: true,            // ВОЗВРАЩАЕМ TRUE: Cloud.ru работает через path-style URL
   requestChecksumCalculation: 'WHEN_REQUIRED', 
   credentials: {
     accessKeyId: process.env.S3_ACCESS_KEY || '',
@@ -29,7 +27,6 @@ export async function POST(request: NextRequest) {
     const ext = path.extname(fileName).toLowerCase() || '.mp4';
     const uniqueFileName = `video_${Date.now()}${ext}`;
 
-    // Явно определяем тип контента, чтобы зафиксировать его для подписи
     const contentType = ext === '.mp4' ? 'video/mp4' : 'application/octet-stream';
 
     const command = new PutObjectCommand({
@@ -38,17 +35,21 @@ export async function POST(request: NextRequest) {
       ContentType: contentType, 
     });
 
-    // Генерируем ссылку. Из-за forcePathStyle: false она сразу будет иметь вид:
-    // https://mesa-edtech-media-bucket.s3.cloud.ru/video_...
-    const uploadUrl = await getSignedUrl(s3, command, { expiresIn: 3600 });
+    // Генерируем ссылку со специальным флагом для CORS-совместимости Cloud.ru
+    const uploadUrl = await getSignedUrl(s3, command, { 
+      expiresIn: 3600,
+      // КРИТИЧЕСКИ ВАЖНО ДЛЯ CLOUD.RU: Говорим SDK не подписывать кастомные заголовки для preflight-запроса OPTIONS. 
+      // Это предотвратит ошибку 400 Bad Request от балансировщика Cloud.ru.
+      signableHeaders: new Set([]), 
+    });
     
-    // ИСПРАВЛЕНО: Корректная публичная ссылка для сохранения в базу данных
+    // Публичная ссылка для сохранения в БД
     const fileViewUrl = `https://cloud.ru{uniqueFileName}`;
 
     return NextResponse.json({
       success: true,
-      uploadUrl: uploadUrl,   // Готовая ссылка для фронтенда
-      contentType: contentType, // Передаем тип на фронтенд для точного совпадения заголовков
+      uploadUrl: uploadUrl,     // Будет иметь стабильный вид: https://cloud.ru...
+      contentType: contentType, 
       url: fileViewUrl       
     });
 
