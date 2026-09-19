@@ -21,8 +21,8 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Доступ запрещен' }, { status: 403 });
     }
 
-    const { searchParams } = new URL(request.url);
-    const fileName = searchParams.get('fileName');
+    // ИСПРАВЛЕНО ТОЧЕЧНО: Использование request.nextUrl для стабильного парсинга за Nginx
+    const fileName = request.nextUrl.searchParams.get('fileName');
     if (!fileName) {
       return NextResponse.json({ error: 'Имя файла обязательно' }, { status: 400 });
     }
