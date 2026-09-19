@@ -1,10 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
+import { S3Client } from '@aws-sdk/client-s3';
+import { Upload } from '@aws-sdk/lib-storage'; // Вернули ваш рабочий менеджер загрузки
 import { getSession } from '@/lib/auth';
 
 const s3 = new S3Client({
   region: 'ru-central-1', 
-  endpoint: 'https://cloud.ru', // ИСПРАВЛЕНО ТОЧНО: Вернули оригинальный эндпоинт из вашего рабочего конфига
+  endpoint: 'https://cloud.ru', // Оставляем ваш исходный рабочий хост
   forcePathStyle: true, 
   credentials: {
     accessKeyId: process.env.S3_ACCESS_KEY || '',
@@ -12,46 +13,45 @@ const s3 = new S3Client({
   },
 });
 
-// УБРАЛИ МЕТОД GET, чтобы полностью исключить кэширование Next.js и редиректы Nginx
-
 export async function POST(request: NextRequest) {
-  // ЛОКАЛЬНЫЙ ЛОГ: Проверяем, что запрос дошел до бэкенда
-  console.log(`=== [SERVER BACKEND LOG: Получен POST запрос] ===`);
+  console.log(`=== [SERVER BACKEND LOG: Получен чанк запроса] ===`);
   
   try {
     const session = await getSession();
     if (!session || session.role !== 'admin') {
-      console.log(`[SERVER BACKEND] Отказано в доступе: не админ`);
       return NextResponse.json({ error: 'Доступ запрещен' }, { status: 403 });
     }
 
+    // Читаем параметры из заголовков фронтенда
     const key = request.headers.get('x-file-key');
     const partNumber = request.headers.get('x-part-number');
 
-    // ЛОКАЛЬНЫЙ ЛОГ: Проверяем заголовки чанка
-    console.log(`[SERVER BACKEND] Ключ файла: ${key}, Номер чанка: ${partNumber}`);
-
     if (!key || !partNumber) {
-      return NextResponse.json({ error: 'Пропущены заголовки x-file-key или x-part-number' }, { status: 400 });
+      return NextResponse.json({ error: 'Пропущены заголовки параметров файла' }, { status: 400 });
     }
 
-    const arrayBuffer = await request.arrayBuffer();
-    const buffer = Buffer.from(arrayBuffer);
-    
-    console.log(`[SERVER BACKEND] Размер принятого буфера: ${(buffer.length / 1024 / 1024).toFixed(2)} MB`);
+    // ЛОКАЛЬНО: Превращаем тело запроса Next.js в чистый Node.js Stream
+    // Это исключает использование request.formData() и не забивает память
+    const chunkStream = request.body; 
+    if (!chunkStream) {
+      return NextResponse.json({ error: 'Тело чанка пустое' }, { status: 400 });
+    }
 
     const chunkKey = `${key}.part${partNumber}`;
 
-    const command = new PutObjectCommand({
-      Bucket: 'mesa-edtech-media-bucket',
-      Key: chunkKey,
-      Body: buffer,
-      ContentType: 'application/octet-stream',
+    // Используем проверенный класс Upload, который не вызывает 404 на Cloud.ru
+    const s3Upload = new Upload({
+      client: s3,
+      params: {
+        Bucket: 'mesa-edtech-media-bucket',
+        Key: chunkKey,
+        Body: chunkStream, // Передаем поток напрямую в S3
+        ContentType: 'application/octet-stream',
+      },
     });
 
-    // Шлем в S3 Cloud.ru
-    await s3.send(command);
-    console.log(`[SERVER BACKEND] Чанк ${partNumber} успешно сохранен в S3`);
+    await s3Upload.done();
+    console.log(`[SERVER BACKEND] Чанк ${partNumber} успешно обработан через Upload и сохранен.`);
 
     return NextResponse.json({
       success: true,
@@ -59,12 +59,8 @@ export async function POST(request: NextRequest) {
       partNumber: parseInt(partNumber, 10)
     });
   } catch (error) {
-    // ГЛУБОКОЕ ЛОГИРОВАНИЕ: Выводим полную ошибку S3 в консоль докера
     console.error('=== [SERVER CRITICAL ERROR] ===');
     console.error(error);
-    
-    return NextResponse.json({ 
-      error: 'Backend S3 Error: ' + (error as Error).message 
-    }, { status: 500 });
+    return NextResponse.json({ error: 'S3 Upload Error: ' + (error as Error).message }, { status: 500 });
   }
 }
