@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { S3Client, CreateMultipartUploadCommand, UploadPartCommand } from '@aws-sdk/client-s3';
-import path from 'path';
+import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
 import { getSession } from '@/lib/auth';
 
+// Используем точный S3 эндпоинт Cloud.ru
 const s3 = new S3Client({
   region: 'ru-central-1', 
   endpoint: 'https://cloud.ru', 
@@ -13,42 +13,12 @@ const s3 = new S3Client({
   },
 });
 
-// GET-запрос: Инициализация загрузки (получаем UploadId от S3)
-export async function GET(request: NextRequest) {
-  try {
-    const session = await getSession();
-    if (!session || session.role !== 'admin') {
-      return NextResponse.json({ error: 'Доступ запрещен' }, { status: 403 });
-    }
-
-    // ИСПРАВЛЕНО ТОЧЕЧНО: Использование request.nextUrl для стабильного парсинга за Nginx
-    const fileName = request.nextUrl.searchParams.get('fileName');
-    if (!fileName) {
-      return NextResponse.json({ error: 'Имя файла обязательно' }, { status: 400 });
-    }
-
-    const ext = path.extname(fileName).toLowerCase() || '.mp4';
-    const uniqueFileName = `video_${Date.now()}${ext}`;
-
-    const command = new CreateMultipartUploadCommand({
-      Bucket: 'mesa-edtech-media-bucket',
-      Key: uniqueFileName,
-      ContentType: ext === '.mp4' ? 'video/mp4' : 'application/octet-stream',
-    });
-
-    const response = await s3.send(command);
-
-    return NextResponse.json({
-      uploadId: response.UploadId,
-      key: uniqueFileName,
-    });
-  } catch (error) {
-    console.error('Ошибка инициализации S3 Multipart:', error);
-    return NextResponse.json({ error: (error as Error).message }, { status: 500 });
-  }
+// Отключаем GET-запрос, так как Cloud.ru S3 отклоняет ручную инициализацию без спец-прав
+export async function GET() {
+  return NextResponse.json({ message: "Use POST for chunk upload" });
 }
 
-// POST-запрос: Принимает ОДИН маленький чанк файла и сразу шлет его в S3 (память не раздувается)
+// POST-запрос: Принимает чанк и сразу транслирует его в S3 без накопления в RAM
 export async function POST(request: NextRequest) {
   try {
     const session = await getSession();
@@ -58,35 +28,35 @@ export async function POST(request: NextRequest) {
 
     const formData = await request.formData();
     const chunk = formData.get('chunk') as Blob;
-    const uploadId = formData.get('uploadId') as string;
     const key = formData.get('key') as string;
-    const partNumber = parseInt(formData.get('partNumber') as string, 10);
+    const partNumber = formData.get('partNumber') as string;
 
-    if (!chunk || !uploadId || !key || !partNumber) {
-      return NextResponse.json({ error: 'Пропущены обязательные параметры чанка' }, { status: 400 });
+    if (!chunk || !key || !partNumber) {
+      return NextResponse.json({ error: 'Пропущены параметры чанка' }, { status: 400 });
     }
 
-    // Переводим Blob чанка в Buffer для AWS SDK
     const arrayBuffer = await chunk.arrayBuffer();
     const buffer = Buffer.from(arrayBuffer);
 
-    const command = new UploadPartCommand({
+    // Уникальный ключ для каждого чанка на диске S3 (например: video_123.mp4.part1)
+    const chunkKey = `${key}.part${partNumber}`;
+
+    const command = new PutObjectCommand({
       Bucket: 'mesa-edtech-media-bucket',
-      Key: key,
-      UploadId: uploadId,
-      PartNumber: partNumber,
+      Key: chunkKey,
       Body: buffer,
+      ContentType: 'application/octet-stream',
     });
 
-    const response = await s3.send(command);
+    await s3.send(command);
 
-    // Возвращаем фронтенду ETag чанка — он критически важен для сборки в конце!
     return NextResponse.json({
-      PartNumber: partNumber,
-      ETag: response.ETag,
+      success: true,
+      partKey: chunkKey,
+      partNumber: parseInt(partNumber, 10)
     });
   } catch (error) {
-    console.error(`Ошибка загрузки чанка #${request.headers.get('part-number')}:`, error);
+    console.error('Ошибка загрузки чанка:', error);
     return NextResponse.json({ error: (error as Error).message }, { status: 500 });
   }
 }

@@ -1,10 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { S3Client, CompleteMultipartUploadCommand } from '@aws-sdk/client-s3';
+import { S3Client, GetObjectCommand, PutObjectCommand, DeleteObjectCommand } from '@aws-sdk/client-s3';
 import { getSession } from '@/lib/auth';
 
 const s3 = new S3Client({
   region: 'ru-central-1',
-  endpoint: 'https://cloud.ru', // Исправили эндпоинт на s3.cloud.ru как в основном роуте
+  endpoint: 'https://cloud.ru',
   forcePathStyle: true,
   credentials: { 
     accessKeyId: process.env.S3_ACCESS_KEY || '', 
@@ -19,32 +19,50 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Доступ запрещен' }, { status: 403 });
     }
 
-    const { uploadId, key, parts } = await request.json();
+    const { key, totalChunks } = await request.json();
     
-    if (!uploadId || !key || !parts || !Array.isArray(parts)) {
-      return NextResponse.json({ error: 'Неверные данные для завершения загрузки' }, { status: 400 });
+    // Последовательно скачиваем чанки из S3 в буфер памяти (по одному!) и склеиваем
+    let finalBuffer = Buffer.alloc(0);
+
+    for (let i = 1; i <= totalChunks; i++) {
+      const chunkKey = `${key}.part${i}`;
+      
+      const getCommand = new GetObjectCommand({
+        Bucket: 'mesa-edtech-media-bucket',
+        Key: chunkKey,
+      });
+
+      const s3Response = await s3.send(getCommand);
+      const streamToBuffer = async (stream: any): Promise<Buffer> => {
+        return new Promise((resolve, reject) => {
+          const chunks: Buffer[] = [];
+          stream.on('data', (chunk: Buffer) => chunks.push(chunk));
+          stream.on('error', reject);
+          stream.on('end', () => resolve(Buffer.concat(chunks)));
+        });
+      };
+
+      const chunkBuffer = await streamToBuffer(s3Response.Body);
+      finalBuffer = Buffer.concat([finalBuffer, chunkBuffer]);
+
+      // Удаляем временный чанк, чтобы не занимать место
+      await s3.send(new DeleteObjectCommand({ Bucket: 'mesa-edtech-media-bucket', Key: chunkKey }));
     }
 
-    // Сортируем части по возрастанию (требование AWS S3)
-    const sortedParts = parts.sort((a, b) => a.PartNumber - b.PartNumber);
-
-    const command = new CompleteMultipartUploadCommand({
+    // Загружаем готовый цельный файл обратно в S3
+    await s3.send(new PutObjectCommand({
       Bucket: 'mesa-edtech-media-bucket',
       Key: key,
-      UploadId: uploadId,
-      MultipartUpload: { Parts: sortedParts },
-    });
-
-    await s3.send(command);
-
-    const fileViewUrl = `https://cloud.ru/mesa-edtech-media-bucket/${key}`;
+      Body: finalBuffer,
+      ContentType: 'video/mp4',
+    }));
 
     return NextResponse.json({ 
       success: true,
-      url: fileViewUrl 
+      url: `https://cloud.ru/mesa-edtech-media-bucket/${key}` 
     });
   } catch (error) {
-    console.error('Ошибка склейки файла в S3:', error);
+    console.error('Ошибка сборки файла:', error);
     return NextResponse.json({ error: (error as Error).message }, { status: 500 });
   }
 }

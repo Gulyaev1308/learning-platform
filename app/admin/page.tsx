@@ -347,26 +347,11 @@ function LessonForm({ lesson, onSave, onCancel }: any) {
     setUploading(true);
 
     try {
-      console.log('=== [FRONTEND LOG: Начало чанковой отправки (Multipart)] ===');
-      console.log(`Файл: ${file.name}, Общий размер: ${(file.size / 1024 / 1024).toFixed(2)} MB`);
-
-      // Шаг 1: Инициализация загрузки на бэкенде (получаем uploadId и уникальный key)
-      const initResponse = await fetch(`/api/admin/upload?fileName=${encodeURIComponent(file.name)}`, {
-        method: 'GET',
-      });
+      console.log('=== [FRONTEND LOG: Начало загрузки чанков] ===');
       
-      if (!initResponse.ok) {
-        const initData = await initResponse.json();
-        throw new Error(initData.error || 'Не удалось инициализировать загрузку');
-      }
-      
-      const { uploadId, key } = await initResponse.json();
-      console.log(`[FRONTEND] Инициализировано успешно. ID: ${uploadId}`);
-
-      // Шаг 2: Нарезка файла и отправка чанками
-      const CHUNK_SIZE = 20 * 1024 * 1024; // Размер чанка — 20 МБ (оптимально для больших файлов)
+      const uniqueKey = `video_${Date.now()}_${file.name.replace(/[^a-zA-Z0-9.]/g, '_')}`;
+      const CHUNK_SIZE = 15 * 1024 * 1024; // 15 МБ порции
       const totalChunks = Math.ceil(file.size / CHUNK_SIZE);
-      const uploadedParts = [];
 
       for (let i = 0; i < totalChunks; i++) {
         const start = i * CHUNK_SIZE;
@@ -374,12 +359,9 @@ function LessonForm({ lesson, onSave, onCancel }: any) {
         const chunk = file.slice(start, end);
         const partNumber = i + 1;
 
-        console.log(`[FRONTEND] Отправка чанка ${partNumber}/${totalChunks} (${((end - start) / 1024 / 1024).toFixed(2)} MB)...`);
-
         const chunkFormData = new FormData();
         chunkFormData.append('chunk', chunk);
-        chunkFormData.append('uploadId', uploadId);
-        chunkFormData.append('key', key);
+        chunkFormData.append('key', uniqueKey);
         chunkFormData.append('partNumber', partNumber.toString());
 
         const chunkResponse = await fetch('/api/admin/upload', {
@@ -389,52 +371,33 @@ function LessonForm({ lesson, onSave, onCancel }: any) {
 
         if (!chunkResponse.ok) {
           const chunkData = await chunkResponse.json();
-          throw new Error(chunkData.error || `Ошибка при загрузке части №${partNumber}`);
+          throw new Error(chunkData.error || `Ошибка чанка №${partNumber}`);
         }
-
-        const chunkResult = await chunkResponse.json();
-        
-        // Сохраняем ETag и номер части для финальной сборки
-        uploadedParts.push({
-          PartNumber: chunkResult.PartNumber,
-          ETag: chunkResult.ETag,
-        });
       }
 
-      console.log('[FRONTEND] Все части успешно загружены. Запрос на склейку файла...');
-
-      // Шаг 3: Финальный запрос на склейку всех чанков в S3
+      // Финальная склейка
       const completeResponse = await fetch('/api/admin/upload/complete', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          uploadId,
-          key,
-          parts: uploadedParts,
+          key: uniqueKey,
+          totalChunks,
         }),
       });
 
       const data = await completeResponse.json();
+      if (!completeResponse.ok) throw new Error(data.error || 'Ошибка сборки');
 
-      if (!completeResponse.ok) {
-        throw new Error(data.error || 'Не удалось завершить сборку файла на сервере');
-      }
-
-      console.log('=== [FRONTEND LOG: Успешно завершено] ===', data.url);
-
-      // Ваша оригинальная логика распределения контента в стейты
       if (formData.type === 'case') {
         setCaseImages(prev => [...prev, data.url]);
       } else {
         setFormData({ ...formData, content: data.url });
       }
 
-      alert('Файл успешно загружен по частям (Multipart)!');
+      alert('Файл успешно загружен!');
       
     } catch (error) {
-      console.error('Критическая ошибка загрузки:', error);
+      console.error(error);
       alert((error as Error).message || 'Ошибка загрузки файла');
     } finally {
       setUploading(false);
