@@ -347,41 +347,33 @@ function LessonForm({ lesson, onSave, onCancel }: any) {
     setUploading(true);
 
     try {
-      console.log('=== [FRONTEND LOG: Получение Presigned URL] ===');
-
-      // 1. Получаем прямую ссылку у нашего бэкенда
-      const response = await fetch(`/api/admin/upload?fileName=${encodeURIComponent(file.name)}`, {
-        method: 'GET'
+      console.log('=== [FRONTEND LOG: Начало прямой потоковой отправки] ===');
+      
+      // Отправляем файл как чистый бинарный поток без FormData упаковки
+      const response = await fetch('/api/admin/upload', {
+        method: 'POST',
+        headers: {
+          'x-file-name': encodeURIComponent(file.name),
+          'Content-Type': file.type || 'video/mp4',
+        },
+        body: file, // Передаем объект файла напрямую, браузер сам превратит его в поток
       });
       
       const data = await response.json();
-      if (!response.ok) throw new Error(data.error || 'Не удалось получить ссылку для загрузки');
 
-      console.log('=== [FRONTEND LOG: Прямая загрузка в Cloud.ru S3] ===');
-
-      // 2. Отправляем файл НАПРЯМУЮ в Cloud.ru S3 через обычный PUT запрос
-      const uploadResponse = await fetch(data.uploadUrl, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': file.type || 'video/mp4',
-        },
-        body: file // Передаем весь файл, браузер сам стримит его в облако
-      });
-
-      if (!uploadResponse.ok) {
-        throw new Error('WAF или S3 отклонил прямую загрузку файла');
+      if (!response.ok) {
+        throw new Error(data.error || 'Не удалось загрузить файл на сервер');
       }
 
-      console.log('=== [FRONTEND LOG: Успешно загружено напрямую] ===', data.fileUrl);
+      console.log('=== [FRONTEND LOG: Успешно загружено] ===', data.url);
 
-      // Ваша оригинальная логика распределения контента в стейты
       if (formData.type === 'case') {
-        setCaseImages(prev => [...prev, data.fileUrl]);
+        setCaseImages(prev => [...prev, data.url]);
       } else {
-        setFormData({ ...formData, content: data.fileUrl });
+        setFormData({ ...formData, content: data.url });
       }
 
-      alert('Файл успешно загружен напрямую в облако!');
+      alert('Файл успешно загружен!');
       
     } catch (error) {
       console.error(error);
