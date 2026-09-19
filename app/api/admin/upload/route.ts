@@ -12,28 +12,33 @@ const s3 = new S3Client({
   },
 });
 
-export async function GET() {
-  return NextResponse.json({ message: "Ready" });
-}
+// УБРАЛИ МЕТОД GET, чтобы полностью исключить кэширование Next.js и редиректы Nginx
 
 export async function POST(request: NextRequest) {
+  // ЛОКАЛЬНЫЙ ЛОГ: Проверяем, что запрос дошел до бэкенда
+  console.log(`=== [SERVER BACKEND LOG: Получен POST запрос] ===`);
+  
   try {
     const session = await getSession();
     if (!session || session.role !== 'admin') {
+      console.log(`[SERVER BACKEND] Отказано в доступе: не админ`);
       return NextResponse.json({ error: 'Доступ запрещен' }, { status: 403 });
     }
 
-    // Читаем параметры из заголовков (это исключает баги парсинга FormData)
     const key = request.headers.get('x-file-key');
     const partNumber = request.headers.get('x-part-number');
+
+    // ЛОКАЛЬНЫЙ ЛОГ: Проверяем заголовки чанка
+    console.log(`[SERVER BACKEND] Ключ файла: ${key}, Номер чанка: ${partNumber}`);
 
     if (!key || !partNumber) {
       return NextResponse.json({ error: 'Пропущены заголовки x-file-key или x-part-number' }, { status: 400 });
     }
 
-    // Получаем чистый бинарный буфер напрямую из тела запроса
     const arrayBuffer = await request.arrayBuffer();
     const buffer = Buffer.from(arrayBuffer);
+    
+    console.log(`[SERVER BACKEND] Размер принятого буфера: ${(buffer.length / 1024 / 1024).toFixed(2)} MB`);
 
     const chunkKey = `${key}.part${partNumber}`;
 
@@ -44,7 +49,9 @@ export async function POST(request: NextRequest) {
       ContentType: 'application/octet-stream',
     });
 
+    // Шлем в S3 Cloud.ru
     await s3.send(command);
+    console.log(`[SERVER BACKEND] Чанк ${partNumber} успешно сохранен в S3`);
 
     return NextResponse.json({
       success: true,
@@ -52,7 +59,12 @@ export async function POST(request: NextRequest) {
       partNumber: parseInt(partNumber, 10)
     });
   } catch (error) {
-    console.error('Критическая ошибка S3:', error);
-    return NextResponse.json({ error: (error as Error).message }, { status: 500 });
+    // ГЛУБОКОЕ ЛОГИРОВАНИЕ: Выводим полную ошибку S3 в консоль докера
+    console.error('=== [SERVER CRITICAL ERROR] ===');
+    console.error(error);
+    
+    return NextResponse.json({ 
+      error: 'Backend S3 Error: ' + (error as Error).message 
+    }, { status: 500 });
   }
 }
