@@ -347,24 +347,82 @@ function LessonForm({ lesson, onSave, onCancel }: any) {
     setUploading(true);
 
     try {
-      console.log('=== [FRONTEND LOG: Начало отправки] ===');
-      
-      const formDataToSend = new FormData();
-      formDataToSend.append('file', file);
+      console.log('=== [FRONTEND LOG: Начало чанковой отправки (Multipart)] ===');
+      console.log(`Файл: ${file.name}, Общий размер: ${(file.size / 1024 / 1024).toFixed(2)} MB`);
 
-      // Отправляем файл на наш обновленный бэкенд Next.js
-      const response = await fetch('/api/admin/upload', {
-        method: 'POST',
-        body: formDataToSend, // Передаем как FormData, чтобы бэкенд поймал file.stream()
+      // Шаг 1: Инициализация загрузки на бэкенде (получаем uploadId и уникальный key)
+      const initResponse = await fetch(`/api/admin/upload?fileName=${encodeURIComponent(file.name)}`, {
+        method: 'GET',
       });
       
-      const data = await response.json();
+      if (!initResponse.ok) {
+        const initData = await initResponse.json();
+        throw new Error(initData.error || 'Не удалось инициализировать загрузку');
+      }
+      
+      const { uploadId, key } = await initResponse.json();
+      console.log(`[FRONTEND] Инициализировано успешно. ID: ${uploadId}`);
 
-      if (!response.ok) {
-        throw new Error(data.error || 'Не удалось загрузить файл на сервер');
+      // Шаг 2: Нарезка файла и отправка чанками
+      const CHUNK_SIZE = 20 * 1024 * 1024; // Размер чанка — 20 МБ (оптимально для больших файлов)
+      const totalChunks = Math.ceil(file.size / CHUNK_SIZE);
+      const uploadedParts = [];
+
+      for (let i = 0; i < totalChunks; i++) {
+        const start = i * CHUNK_SIZE;
+        const end = Math.min(start + CHUNK_SIZE, file.size);
+        const chunk = file.slice(start, end);
+        const partNumber = i + 1;
+
+        console.log(`[FRONTEND] Отправка чанка ${partNumber}/${totalChunks} (${((end - start) / 1024 / 1024).toFixed(2)} MB)...`);
+
+        const chunkFormData = new FormData();
+        chunkFormData.append('chunk', chunk);
+        chunkFormData.append('uploadId', uploadId);
+        chunkFormData.append('key', key);
+        chunkFormData.append('partNumber', partNumber.toString());
+
+        const chunkResponse = await fetch('/api/admin/upload', {
+          method: 'POST',
+          body: chunkFormData,
+        });
+
+        if (!chunkResponse.ok) {
+          const chunkData = await chunkResponse.json();
+          throw new Error(chunkData.error || `Ошибка при загрузке части №${partNumber}`);
+        }
+
+        const chunkResult = await chunkResponse.json();
+        
+        // Сохраняем ETag и номер части для финальной сборки
+        uploadedParts.push({
+          PartNumber: chunkResult.PartNumber,
+          ETag: chunkResult.ETag,
+        });
       }
 
-      console.log('=== [FRONTEND LOG: Успешно] ===', data.url);
+      console.log('[FRONTEND] Все части успешно загружены. Запрос на склейку файла...');
+
+      // Шаг 3: Финальный запрос на склейку всех чанков в S3
+      const completeResponse = await fetch('/api/admin/upload/complete', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          uploadId,
+          key,
+          parts: uploadedParts,
+        }),
+      });
+
+      const data = await completeResponse.json();
+
+      if (!completeResponse.ok) {
+        throw new Error(data.error || 'Не удалось завершить сборку файла на сервере');
+      }
+
+      console.log('=== [FRONTEND LOG: Успешно завершено] ===', data.url);
 
       // Ваша оригинальная логика распределения контента в стейты
       if (formData.type === 'case') {
@@ -376,7 +434,7 @@ function LessonForm({ lesson, onSave, onCancel }: any) {
       alert('Файл успешно загружен по частям (Multipart)!');
       
     } catch (error) {
-      console.error(error);
+      console.error('Критическая ошибка загрузки:', error);
       alert((error as Error).message || 'Ошибка загрузки файла');
     } finally {
       setUploading(false);
