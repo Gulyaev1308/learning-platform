@@ -342,45 +342,83 @@ function LessonForm({ lesson, onSave, onCancel }: any) {
   }, [lesson]);
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
+    const file = e.target.files ? e.target.files[0] : null;
     if (!file) return;
     setUploading(true);
+
     try {
-      const response = await fetch('/api/admin/upload', {
+      console.log(`=== START CHUNKED UPLOAD ===`);
+      console.log(`Файл: ${file.name}, Размер: ${(file.size / 1024 / 1024).toFixed(2)} MB`);
+
+      // Шаг 1: Сообщаем бэкенду размер файла и получаем массив ссылок для чанков
+      const initResponse = await fetch('/api/admin/upload', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ fileName: file.name }),
+        body: JSON.stringify({ fileName: file.name, fileSize: file.size }),
       });
       
-      const data = await response.json();
+      const initData = await initResponse.json();
+      if (!initResponse.ok) throw new Error(initData.error || 'Не удалось инициализировать загрузку');
 
-      if (!response.ok) {
-        throw new Error(data.error || 'Не удалось получить ссылку');
+      const { uploadId, key, urls, partSize, url } = initData;
+      const uploadedParts: { ETag: string; PartNumber: number }[] = [];
+
+      // Шаг 2: Последовательно нарезаем файл и отправляем чанки напрямую в S3 Cloud.ru
+      for (let i = 0; i < urls.length; i++) {
+        const start = i * partSize;
+        const end = Math.min(start + partSize, file.size);
+        const chunk = file.slice(start, end);
+        const partNumber = i + 1;
+
+        console.log(`Загрузка чанка ${partNumber}/${urls.length}...`);
+
+        const uploadResponse = await fetch(urls[i], {
+          method: 'PUT',
+          body: chunk,
+        });
+
+        if (!uploadResponse.ok) {
+          throw new Error(`Ошибка при загрузке чанка №${partNumber}`);
+        }
+
+        // Каждому загруженному чанку S3 присваивает маркер ETag, он обязателен для сборки
+        const etag = uploadResponse.headers.get('ETag');
+        if (!etag) throw new Error(`Не получен ETag для чанка №${partNumber}`);
+
+        uploadedParts.push({
+          ETag: etag.replace(/"/g, ''), // Очищаем кавычки в ETag, если они есть
+          PartNumber: partNumber,
+        });
+
+        const progressPercent = ((end / file.size) * 100).toFixed(1);
+        console.log(`[PROGRESS] Загружено: ${progressPercent}%`);
       }
 
-      // Отправляем PUT запрос напрямую в S3 Cloud.ru с валидными параметрами региона
-      const uploadToS3 = await fetch(data.uploadUrl, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': data.contentType,
-        },
-        body: file,
+      // Шаг 3: Отправляем запрос на бэкенд для финальной склейки всех чанков в один файл
+      console.log('Сборка файла на стороне Cloud.ru...');
+      const completeResponse = await fetch('/api/admin/upload/complete', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ uploadId, key, parts: uploadedParts }),
       });
 
-      if (!uploadToS3.ok) {
-        throw new Error('Облако S3 отклонило загрузку файла');
-      }
-      
+      const completeData = await completeResponse.json();
+      if (!completeResponse.ok) throw new Error(completeData.error || 'Ошибка сборки файла');
+
+      console.log('=== UPLOAD SUCCESS ===');
+
+      // Ваша оригинальная логика обновления стейтов
       if (formData.type === 'case') {
-        setCaseImages(prev => [...prev, data.url]);
+        setCaseImages(prev => [...prev, url]);
       } else {
-        setFormData({ ...formData, content: data.url });
+        setFormData({ ...formData, content: url });
       }
-      
-      alert('Видео успешно загружено!');
-      
+
+      alert('Видео успешно нарезано, загружено и склеено в облаке!');
+
     } catch (error) {
-      alert((error as Error).message || 'Ошибка загрузки');
+      console.error('Ошибка загрузки:', error);
+      alert((error as Error).message || 'Ошибка при чанговой загрузке');
     } finally {
       setUploading(false);
     }
