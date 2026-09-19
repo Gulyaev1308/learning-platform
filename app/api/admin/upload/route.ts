@@ -4,12 +4,11 @@ import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import path from 'path';
 import { getSession } from '@/lib/auth';
 
-// Инициализация S3 клиента с отключением избыточных гибких контрольных сумм AWS
+// Инициализация S3 клиента в режиме Virtual-Hosted Style для Cloud.ru
 const s3 = new S3Client({
   region: 'ru-central1', 
   endpoint: 'https://s3.cloud.ru', 
-  forcePathStyle: true, 
-  // КРИТИЧЕСКИЙ ФИКС ДЛЯ CLOUD.RU: Отключаем автоматический расчет контрольных сумм AWS SDK v3
+  forcePathStyle: false, // ИСПРАВЛЕНО: переключаем на доменный стиль бакетов (bucket.s3.cloud.ru)
   requestChecksumCalculation: 'WHEN_REQUIRED', 
   credentials: {
     accessKeyId: process.env.S3_ACCESS_KEY || '',
@@ -30,23 +29,23 @@ export async function POST(request: NextRequest) {
     const ext = path.extname(fileName) || '.mp4';
     const uniqueFileName = `video_${Date.now()}${ext}`;
 
-    // Передаем Content-Type, чтобы S3 сопоставил сигнатуру подписи
+    // Передаем Content-Type для строгого соответствия с фронтендом
     const command = new PutObjectCommand({
       Bucket: 'mesa-edtech-media-bucket',
       Key: uniqueFileName,
       ContentType: ext === '.mp4' ? 'video/mp4' : 'application/octet-stream', 
     });
 
-    // Генерируем чистый подписанный URL без лишних параметров контрольных сумм
+    // Генерирует ссылку вида: https://mesa-edtech-media-bucket.s3.cloud.ru/...
     const uploadUrl = await getSignedUrl(s3, command, { expiresIn: 3600 });
     
-    // Чистый URL для последующего сохранения в Базу Данных
+    // Ссылка для сохранения в БД в формате Virtual-Hosted
     const fileViewUrl = `https://cloud.ru{uniqueFileName}`;
 
     return NextResponse.json({
       success: true,
-      uploadUrl: uploadUrl, 
-      url: fileViewUrl       
+      uploadUrl: uploadUrl, // Сюда фронтенд отправляет видео (метод PUT)
+      url: fileViewUrl       // Эту ссылку сохраняй в БД курса
     });
 
   } catch (error) {
