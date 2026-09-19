@@ -4,11 +4,13 @@ import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import path from 'path';
 import { getSession } from '@/lib/auth';
 
-// Инициализация S3 клиента с корректным и доступным в DNS эндпоинтом Cloud.ru
+// Инициализация S3 клиента с отключением избыточных гибких контрольных сумм AWS
 const s3 = new S3Client({
   region: 'ru-central1', 
-  endpoint: 'https://s3.cloud.ru', // ИСПРАВЛЕНО: Правильный домен Object Storage
-  forcePathStyle: true, // Обязательно для Cloud.ru, чтобы бакет шел в пути URL
+  endpoint: 'https://s3.cloud.ru', 
+  forcePathStyle: true, 
+  // КРИТИЧЕСКИЙ ФИКС ДЛЯ CLOUD.RU: Отключаем автоматический расчет контрольных сумм AWS SDK v3
+  requestChecksumCalculation: 'WHEN_REQUIRED', 
   credentials: {
     accessKeyId: process.env.S3_ACCESS_KEY || '',
     secretAccessKey: process.env.S3_SECRET_KEY || '',
@@ -28,23 +30,23 @@ export async function POST(request: NextRequest) {
     const ext = path.extname(fileName) || '.mp4';
     const uniqueFileName = `video_${Date.now()}${ext}`;
 
-    // Важно передавать Content-Type, чтобы S3 не ругался на несоответствие сигнатуры при PUT-запросе
+    // Передаем Content-Type, чтобы S3 сопоставил сигнатуру подписи
     const command = new PutObjectCommand({
       Bucket: 'mesa-edtech-media-bucket',
       Key: uniqueFileName,
       ContentType: ext === '.mp4' ? 'video/mp4' : 'application/octet-stream', 
     });
 
-    // Автоматически генерирует правильный подписанный URL на основе endpoint
+    // Генерируем чистый подписанный URL без лишних параметров контрольных сумм
     const uploadUrl = await getSignedUrl(s3, command, { expiresIn: 3600 });
     
-    // Чистый URL для последующего сохранения в Базу Данных (для просмотра видео учениками)
-    const fileViewUrl = `https://s3.cloud.ru/mesa-edtech-media-bucket/${uniqueFileName}`; // ИСПРАВЛЕНО
+    // Чистый URL для последующего сохранения в Базу Данных
+    const fileViewUrl = `https://cloud.ru{uniqueFileName}`;
 
     return NextResponse.json({
       success: true,
-      uploadUrl: uploadUrl, // Сюда фронтенд отправляет видео (метод PUT)
-      url: fileViewUrl       // Эту ссылку сохраняй в БД курса
+      uploadUrl: uploadUrl, 
+      url: fileViewUrl       
     });
 
   } catch (error) {
