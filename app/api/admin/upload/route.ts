@@ -4,13 +4,11 @@ import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import path from 'path';
 import { getSession } from '@/lib/auth';
 
-// Конфигурация S3 клиента с региональным эндпоинтом Cloud.ru
 const s3 = new S3Client({
   region: 'ru-central1', 
-  // ИСПРАВЛЕНО: Добавлен регион в поддомен, чтобы балансировщик Cloud.ru корректно обрабатывал OPTIONS
-  endpoint: 'https://cloud.ru', 
-  forcePathStyle: false, // Оставляем Virtual-Hosted для корректной маршрутизации поддоменов
-  requestChecksumCalculation: 'WHEN_REQUIRED', 
+  endpoint: 'https://s3.cloud.ru', // Базовый официальный эндпоинт Cloud.ru
+  forcePathStyle: true, // Включаем обратно path-style, чтобы SDK гарантированно генерировал стабильный URL без багов отрезания поддоменов
+  requestChecksumCalculation: 'WHEN_REQUIRED', // Отключаем избыточные контрольные суммы AWS
   credentials: {
     accessKeyId: process.env.S3_ACCESS_KEY || '',
     secretAccessKey: process.env.S3_SECRET_KEY || '',
@@ -19,7 +17,6 @@ const s3 = new S3Client({
 
 export async function POST(request: NextRequest) {
   try {
-    // Сохраняем твою проверку прав авторизации администратора
     const session = await getSession();
     if (!session || session.role !== 'admin') {
       return NextResponse.json({ error: 'Доступ запрещен' }, { status: 403 });
@@ -30,23 +27,30 @@ export async function POST(request: NextRequest) {
     const ext = path.extname(fileName) || '.mp4';
     const uniqueFileName = `video_${Date.now()}${ext}`;
 
-    // Передаем Content-Type для строгого соответствия с фронтендом
     const command = new PutObjectCommand({
       Bucket: 'mesa-edtech-media-bucket',
       Key: uniqueFileName,
       ContentType: ext === '.mp4' ? 'video/mp4' : 'application/octet-stream', 
     });
 
-    // Ссылка примет вид: https://cloud.ru...
-    const uploadUrl = await getSignedUrl(s3, command, { expiresIn: 3600 });
+    // Генерируем надежную временную ссылку Path-Style: https://cloud.ru...
+    const rawUploadUrl = await getSignedUrl(s3, command, { expiresIn: 3600 });
     
-    // Чистая ссылка для записи в БД
-    const fileViewUrl = `https://cloud.ru${uniqueFileName}`;
+    // ТРАНСФОРМАЦИЯ В VIRTUAL-HOSTED: Точечно пересобираем ссылку в формат поддомена,
+    // который идеально переваривает балансировщик Cloud.ru при OPTIONS-запросах.
+    // Превратит в: https://mesa-edtech-media-bucket.s3.cloud.ru/video_...
+    const uploadUrl = rawUploadUrl.replace(
+      'https://cloud.ru',
+      'https://mesa-edtech-media-bucket.s3.cloud.ru'
+    );
+    
+    // Ссылка для сохранения в БД для просмотра учениками
+    const fileViewUrl = `https://cloud.ru{uniqueFileName}`;
 
     return NextResponse.json({
       success: true,
-      uploadUrl: uploadUrl, // Сюда фронтенд отправляет видео (метод PUT)
-      url: fileViewUrl       // Эту ссылку сохраняй в БД курса
+      uploadUrl: uploadUrl, // Идеальная ссылка для фронтенда (метод PUT)
+      url: fileViewUrl       
     });
 
   } catch (error) {
