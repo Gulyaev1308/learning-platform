@@ -1,6 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
-import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
+import { 
+  S3Client, 
+  CreateMultipartUploadCommand, 
+  UploadPartCommand, 
+  CompleteMultipartUploadCommand 
+} from '@aws-sdk/client-s3';
 import path from 'path';
 import { getSession } from '@/lib/auth';
 
@@ -21,36 +25,55 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Доступ запрещен' }, { status: 403 });
     }
 
-    const { fileName } = await request.json();
+    const { action, fileName, uploadId, partNumber, chunk, parts } = await request.json();
+    const Bucket = 'mesa-edtech-media-bucket';
 
-    const ext = path.extname(fileName) || '.mp4';
-    const uniqueFileName = `video_${Date.now()}${ext}`;
+    // 1. Инициализация загрузки
+    if (action === 'start') {
+      const ext = path.extname(fileName) || '.mp4';
+      const uniqueFileName = `video_${Date.now()}${ext}`;
+      
+      const command = new CreateMultipartUploadCommand({
+        Bucket,
+        Key: uniqueFileName,
+        ContentType: 'video/mp4'
+      });
+      const res = await s3.send(command);
+      
+      return NextResponse.json({ uploadId: res.UploadId, key: uniqueFileName });
+    }
 
-    const command = new PutObjectCommand({
-      Bucket: 'mesa-edtech-media-bucket',
-      Key: uniqueFileName,
-    });
+    // 2. Загрузка отдельной части (чанга)
+    if (action === 'upload') {
+      const buffer = Buffer.from(chunk, 'base64');
+      const command = new UploadPartCommand({
+        Bucket,
+        Key: fileName,
+        UploadId: uploadId,
+        PartNumber: Number(partNumber),
+        Body: buffer
+      });
+      const res = await s3.send(command);
+      return NextResponse.json({ ETag: res.ETag });
+    }
 
-    const rawUploadUrl = await getSignedUrl(s3, command, { expiresIn: 3600 });
+    // 3. Завершение загрузки и склейка файла
+    if (action === 'complete') {
+      const command = new CompleteMultipartUploadCommand({
+        Bucket,
+        Key: fileName,
+        UploadId: uploadId,
+        MultipartUpload: { Parts: parts }
+      });
+      await s3.send(command);
+      return NextResponse.json({
+        success: true,
+        url: `https://cloud.ru{Bucket}/${fileName}`
+      });
+    }
 
-    // БЕЗОПАСНАЯ ОЧИСТКА ССЫЛКИ ЧЕРЕЗ ОБЪЕКТ URL
-    const urlObj = new URL(rawUploadUrl);
-    
-    // Меняем хост на правильный S3 эндпоинт
-    urlObj.hostname = 's3.cloud.ru';
-    
-    // Жестко удаляем чексуммы, которые вешают OPTIONS-запрос в Cloud.ru
-    urlObj.searchParams.delete('x-amz-checksum-crc32');
-    urlObj.searchParams.delete('x-amz-sdk-checksum-algorithm');
-    urlObj.searchParams.delete('x-id'); // Очищаем x-id=PutObject, так как метод PUT и так понятен
-
-    return NextResponse.json({
-      success: true,
-      uploadUrl: urlObj.toString(),
-      url: `https://cloud.ru{uniqueFileName}`
-    });
-
+    return NextResponse.json({ error: 'Неверное действие' }, { status: 400 });
   } catch (error) {
-    return NextResponse.json({ error: 'Ошибка S3: ' + (error as Error).message }, { status: 500 });
+    return NextResponse.json({ error: 'S3 Error: ' + (error as Error).message }, { status: 500 });
   }
 }
