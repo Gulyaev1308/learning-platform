@@ -4,10 +4,9 @@ import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import path from 'path';
 import { getSession } from '@/lib/auth';
 
-// Канонические настройки строго для Cloud.ru Evolution
 const s3 = new S3Client({
   region: 'ru-central-1', 
-  endpoint: 'https://cloud.ru', // Строго s3.cloud.ru
+  endpoint: 'https://s3.cloud.ru', // ХОСТ ИСПРАВЛЕН ЖЕСТКО
   forcePathStyle: true, 
   credentials: {
     accessKeyId: process.env.S3_ACCESS_KEY || '',
@@ -36,21 +35,16 @@ export async function GET(request: NextRequest) {
       ContentType: 'video/mp4',
     });
 
-    // Ссылка активна 1 час
     const uploadUrl = await getSignedUrl(s3, command, { expiresIn: 3600 });
-    const fileViewUrl = `https://cloud.ru/mesa-edtech-media-bucket/${uniqueFileName}`;
+    const fileViewUrl = `https://cloud.ru{uniqueFileName}`;
 
-    return NextResponse.json({
-      uploadUrl,
-      fileUrl: fileViewUrl,
-    });
+    return NextResponse.json({ uploadUrl, fileUrl: fileViewUrl });
   } catch (error) {
     console.error('Ошибка генерации ссылки Cloud.ru:', error);
     return NextResponse.json({ error: (error as Error).message }, { status: 500 });
   }
 }
 
-// Оставляем метод DELETE для удаления роликов, если админ передумал
 export async function DELETE(request: NextRequest) {
   try {
     const session = await getSession();
