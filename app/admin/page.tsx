@@ -346,8 +346,6 @@ function LessonForm({ lesson, onSave, onCancel }: any) {
     if (!file) return;
     setUploading(true);
     try {
-      // Убрали дублирующий стейт setUploading(true)
-
       const response = await fetch('/api/admin/upload', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -360,17 +358,17 @@ function LessonForm({ lesson, onSave, onCancel }: any) {
         throw new Error(data.error || 'Не удалось получить ссылку');
       }
 
-      // Переводим в ArrayBuffer для чистой бинарной передачи
-      const arrayBuffer = await file.arrayBuffer();
-
-      // Отправляем PUT запрос в S3 Cloud.ru с обязательным Content-Type заголовком
+      // Отправляем PUT запрос в S3 Cloud.ru
       const uploadToS3 = await fetch(data.uploadUrl, {
         method: 'PUT',
         headers: {
-          // ИСПРАВЛЕНО: Явно передаем тип (например video/mp4), чтобы S3 принял сигнатуру подписи
-          'Content-Type': file.type || 'video/mp4',
+          // ИСПРАВЛЕНО: Берём тип строго из бэкенда (data.contentType), 
+          // чтобы заголовки со стороны клиента совпали с подписью AWS SDK на 100%
+          'Content-Type': data.contentType,
         },
-        body: arrayBuffer,
+        // ИСПРАВЛЕНО: Передаем файл напрямую (Blob/File). Для метода PUT в S3 
+        // не нужно делать .arrayBuffer(), браузер сам эффективно отправит бинарные данные
+        body: file,
       });
 
       if (!uploadToS3.ok) {
