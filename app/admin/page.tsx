@@ -346,7 +346,6 @@ function LessonForm({ lesson, onSave, onCancel }: any) {
   const [uploadedFileUrl, setUploadedFileUrl] = useState<string>(''); 
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    // Исправлено: берем строго первый файл из списка
     const file = e.target.files ? e.target.files[0] : null;
     if (!file) return;
     setUploading(true);
@@ -355,43 +354,51 @@ function LessonForm({ lesson, onSave, onCancel }: any) {
     setAbortController(controller);
 
     try {
-      console.log('=== [FRONTEND LOG: Начало прямой потоковой отправки] ===');
-      console.log(`Файл: ${file.name}, Общий размер: ${(file.size / 1024 / 1024).toFixed(2)} MB`);
-      
-      const response = await fetch('/api/admin/upload', {
-        method: 'POST',
-        headers: {
-          'x-file-name': encodeURIComponent(file.name),
-          'Content-Type': file.type || 'video/mp4',
-        },
-        body: file, 
-        signal: controller.signal, 
+      console.log('=== [FRONTEND LOG: Шаг 1 — Запрос подписанной ссылки у бэкенда] ===');
+
+      // Делаем легкий GET-запрос на получение персональной ссылки для загрузки
+      const response = await fetch(`/api/admin/upload?fileName=${encodeURIComponent(file.name)}`, {
+        method: 'GET',
+        signal: controller.signal
       });
       
       const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Не удалось сгенерировать ссылку');
 
-      if (!response.ok) {
-        throw new Error(data.error || 'Не удалось загрузить файл на сервер');
+      console.log('=== [FRONTEND LOG: Шаг 2 — Прямая трансляция файла сокетом в S3] ===');
+
+      // Отправляем файл НАПРЯМУЮ на сервера хранения Cloud.ru Evolution S3
+      const uploadResponse = await fetch(data.uploadUrl, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': file.type || 'video/mp4',
+        },
+        body: file, // Браузер стримит гигабайт напрямую в хранилище, минуя твой докер
+        signal: controller.signal,
+      });
+
+      if (!uploadResponse.ok) {
+        throw new Error('Cloud.ru S3 отклонил прямую загрузку потока. Проверьте CORS настройки бакета.');
       }
 
-      console.log('=== [FRONTEND LOG: Успешно загружено] ===', data.url);
-      setUploadedFileUrl(data.url); 
+      console.log('=== [FRONTEND LOG: Успешно доставлено в S3] ===', data.fileUrl);
+      setUploadedFileUrl(data.fileUrl); 
 
       if (formData.type === 'case') {
-        setCaseImages(prev => [...prev, data.url]);
+        setCaseImages(prev => [...prev, data.fileUrl]);
       } else {
-        setFormData({ ...formData, content: data.url });
+        setFormData({ ...formData, content: data.fileUrl });
       }
 
-      alert('Файл успешно загружен! Не забудьте нажать "Сохранить", чтобы привязать его к уроку.');
+      alert('Файл успешно сохранен напрямую в облако! Нажмите "Сохранить" в форме.');
       
     } catch (error: any) {
       if (error.name === 'AbortError') {
-        console.log('=== [FRONTEND LOG: Загрузка файла успешно прервана пользователем] ===');
-        alert('Загрузка файла остановлена.');
+        console.log('=== [FRONTEND LOG: Сетевой поток остановлен пользователем] ===');
+        alert('Загрузка остановлена.');
       } else {
         console.error(error);
-        alert(error.message || 'Ошибка загрузки файла');
+        alert(error.message || 'Ошибка отправки файла');
       }
     } finally {
       setUploading(false);
