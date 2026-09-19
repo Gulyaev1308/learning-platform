@@ -2,6 +2,7 @@ import type { NextApiRequest, NextApiResponse } from 'next';
 import { S3Client } from '@aws-sdk/client-s3';
 import { Upload } from '@aws-sdk/lib-storage';
 import path from 'path';
+import { getSession } from '@/lib/auth';
 
 export const config = {
   api: {
@@ -27,11 +28,15 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   console.log(`=== [PAGES ROUTER LOG: Сквозной стриминг запущен] ===`);
 
   try {
-    const cookies = req.headers.cookie;
-    if (!cookies || !cookies.includes('iron-session')) {
-      console.log(`[PAGES ROUTER] Отказано в доступе: сессия не найдена`);
+    // ИСПРАВЛЕНО: Передаем req и res как контекст для iron-session в Pages Router
+    const session = await getSession({ req, res } as any);
+    
+    if (!session || session.role !== 'admin') {
+      console.log(`[PAGES ROUTER] Отказано в доступе: сессия не валидна или пользователь не админ`);
       return res.status(403).json({ error: 'Доступ запрещен' });
     }
+
+    console.log(`[PAGES ROUTER] Авторизация успешна. Админ: ${session.userId || 'ID OK'}`);
 
     const encodedFileName = req.headers['x-file-name'] as string;
     if (!encodedFileName) {
@@ -48,7 +53,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       params: {
         Bucket: 'mesa-edtech-media-bucket',
         Key: uniqueFileName,
-        // @ts-ignore - Отключаем строгую проверку типов NodeStream для стабильного билда
+        // @ts-ignore
         Body: req, 
         ContentType: contentType,
       },
