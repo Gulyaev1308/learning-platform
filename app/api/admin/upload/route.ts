@@ -3,6 +3,7 @@ import { S3Client } from '@aws-sdk/client-s3';
 import { Upload } from '@aws-sdk/lib-storage';
 import { getSession } from '@/lib/auth';
 
+// Жесткая каноническая конфигурация под S3 Cloud.ru Evolution
 const s3 = new S3Client({
   region: 'ru-central-1', 
   endpoint: 'https://cloud.ru', 
@@ -14,7 +15,7 @@ const s3 = new S3Client({
 });
 
 export async function POST(request: NextRequest) {
-  console.log(`=== [SERVER BACKEND LOG: Получен легитимный FormData чанк] ===`);
+  console.log(`=== [SERVER BACKEND LOG: Получен FormData чанк Evolution] ===`);
   
   try {
     const session = await getSession();
@@ -22,8 +23,6 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Доступ запрещен' }, { status: 403 });
     }
 
-    // ВАЖНО: используем встроенный в Next.js парсер FormData ТОЛЬКО для маленького чанка (15МБ)
-    // Для 15 МБ это абсолютно безопасно и не вызывает Out of Memory!
     const formData = await request.formData();
     const chunk = formData.get('chunk') as Blob;
     const key = formData.get('key') as string;
@@ -33,21 +32,27 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Пропущены параметры FormData' }, { status: 400 });
     }
 
+    // Читаем массив байт чанка напрямую в буфер Node.js
+    const arrayBuffer = await chunk.arrayBuffer();
+    const buffer = Buffer.from(arrayBuffer);
+    
+    console.log(`[SERVER BACKEND] Размер буфера для отправки в Evolution: ${(buffer.length / 1024 / 1024).toFixed(2)} MB`);
+
     const chunkKey = `${key}.part${partNumber}`;
 
-    // Передаем поток чанка в стабильный Upload
+    // Передаем в S3 чистый Buffer
     const s3Upload = new Upload({
       client: s3,
       params: {
         Bucket: 'mesa-edtech-media-bucket',
         Key: chunkKey,
-        Body: chunk.stream(), 
+        Body: buffer, 
         ContentType: 'application/octet-stream',
       },
     });
 
     await s3Upload.done();
-    console.log(`[SERVER BACKEND] Чанк ${partNumber} успешно пропущен WAF и сохранен.`);
+    console.log(`[SERVER BACKEND] Чанк ${partNumber} успешно сохранен в Evolution S3.`);
 
     return NextResponse.json({
       success: true,
