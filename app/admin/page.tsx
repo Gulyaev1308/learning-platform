@@ -347,10 +347,10 @@ function LessonForm({ lesson, onSave, onCancel }: any) {
     setUploading(true);
 
     try {
-      console.log('=== [FRONTEND LOG: Начало загрузки чанков] ===');
+      console.log('=== [FRONTEND LOG: Старт бинарной загрузки] ===');
       
       const uniqueKey = `video_${Date.now()}_${file.name.replace(/[^a-zA-Z0-9.]/g, '_')}`;
-      const CHUNK_SIZE = 15 * 1024 * 1024; // 15 МБ порции
+      const CHUNK_SIZE = 15 * 1024 * 1024; // Порции по 15 МБ
       const totalChunks = Math.ceil(file.size / CHUNK_SIZE);
 
       for (let i = 0; i < totalChunks; i++) {
@@ -359,14 +359,17 @@ function LessonForm({ lesson, onSave, onCancel }: any) {
         const chunk = file.slice(start, end);
         const partNumber = i + 1;
 
-        const chunkFormData = new FormData();
-        chunkFormData.append('chunk', chunk);
-        chunkFormData.append('key', uniqueKey);
-        chunkFormData.append('partNumber', partNumber.toString());
+        console.log(`[FRONTEND] Отправка чанка ${partNumber}/${totalChunks}...`);
 
+        // Шлем чистый бинарник и параметры в заголовках
         const chunkResponse = await fetch('/api/admin/upload', {
           method: 'POST',
-          body: chunkFormData,
+          headers: {
+            'x-file-key': uniqueKey,
+            'x-part-number': partNumber.toString(),
+            'Content-Type': 'application/octet-stream'
+          },
+          body: chunk // Передаем Blob напрямую
         });
 
         if (!chunkResponse.ok) {
@@ -375,7 +378,9 @@ function LessonForm({ lesson, onSave, onCancel }: any) {
         }
       }
 
-      // Финальная склейка
+      console.log('[FRONTEND] Все чанки на сервере. Запуск сборки...');
+
+      // Запрос на финальную склейку
       const completeResponse = await fetch('/api/admin/upload/complete', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -386,7 +391,7 @@ function LessonForm({ lesson, onSave, onCancel }: any) {
       });
 
       const data = await completeResponse.json();
-      if (!completeResponse.ok) throw new Error(data.error || 'Ошибка сборки');
+      if (!completeResponse.ok) throw new Error(data.error || 'Ошибка сборки файла');
 
       if (formData.type === 'case') {
         setCaseImages(prev => [...prev, data.url]);
