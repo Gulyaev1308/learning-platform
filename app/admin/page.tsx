@@ -25,6 +25,7 @@ export default function AdminPage() {
   const [currentBlockId, setCurrentBlockId] = useState<number | null>(null);
   const [currentModuleId, setCurrentModuleId] = useState<number | null>(null);
 
+
   const fetchLeaders = useCallback(async () => {
     try {
       const response = await fetch('/api/admin/leaders');
@@ -341,22 +342,30 @@ function LessonForm({ lesson, onSave, onCancel }: any) {
     }
   }, [lesson]);
 
+  const [abortController, setAbortController] = useState<AbortController | null>(null);
+  const [uploadedFileUrl, setUploadedFileUrl] = useState<string>(''); 
+
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    // Исправлено: берем строго первый файл из списка
     const file = e.target.files ? e.target.files[0] : null;
     if (!file) return;
     setUploading(true);
 
+    const controller = new AbortController();
+    setAbortController(controller);
+
     try {
       console.log('=== [FRONTEND LOG: Начало прямой потоковой отправки] ===');
+      console.log(`Файл: ${file.name}, Общий размер: ${(file.size / 1024 / 1024).toFixed(2)} MB`);
       
-      // Отправляем файл как чистый бинарный поток без FormData упаковки
-      const response = await fetch('/api/admin/raw-upload', {
+      const response = await fetch('/api/admin/upload', {
         method: 'POST',
         headers: {
           'x-file-name': encodeURIComponent(file.name),
           'Content-Type': file.type || 'video/mp4',
         },
-        body: file,
+        body: file, 
+        signal: controller.signal, 
       });
       
       const data = await response.json();
@@ -366,6 +375,7 @@ function LessonForm({ lesson, onSave, onCancel }: any) {
       }
 
       console.log('=== [FRONTEND LOG: Успешно загружено] ===', data.url);
+      setUploadedFileUrl(data.url); 
 
       if (formData.type === 'case') {
         setCaseImages(prev => [...prev, data.url]);
@@ -373,13 +383,44 @@ function LessonForm({ lesson, onSave, onCancel }: any) {
         setFormData({ ...formData, content: data.url });
       }
 
-      alert('Файл успешно загружен!');
+      alert('Файл успешно загружен! Не забудьте нажать "Сохранить", чтобы привязать его к уроку.');
       
-    } catch (error) {
-      console.error(error);
-      alert((error as Error).message || 'Ошибка загрузки файла');
+    } catch (error: any) {
+      if (error.name === 'AbortError') {
+        console.log('=== [FRONTEND LOG: Загрузка файла успешно прервана пользователем] ===');
+        alert('Загрузка файла остановлена.');
+      } else {
+        console.error(error);
+        alert(error.message || 'Ошибка загрузки файла');
+      }
     } finally {
       setUploading(false);
+      setAbortController(null);
+    }
+  };
+
+  const handleCancelUploadOrForm = async () => {
+    if (abortController) {
+      abortController.abort();
+    }
+
+    if (uploadedFileUrl) {
+      console.log('[CLEANUP] Удаляем несохраненный ролик из S3...');
+      try {
+        await fetch('/api/admin/upload', {
+          method: 'DELETE',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ fileUrl: uploadedFileUrl }),
+        });
+      } catch (err) {
+        console.error('Не удалось очистить неиспользованный файл:', err);
+      } finally {
+        setUploadedFileUrl(''); // ИСПРАВЛЕНО: Теперь корректно вызывается функция-сеттер стейта
+      }
+    }
+
+    if (typeof onCancel === 'function') {
+      onCancel();
     }
   };
 
@@ -620,7 +661,7 @@ function LessonForm({ lesson, onSave, onCancel }: any) {
           </div>
 
           <div className="flex justify-end gap-3 pt-4 border-t-2">
-            <button type="button" onClick={onCancel} className="px-4 py-2 text-gray-800 font-bold">Отмена</button>
+            <button type="button" onClick={handleCancelUploadOrForm} className="px-4 py-2 text-gray-800 font-bold">Отмена</button>
             <button type="submit" className="bg-blue-600 text-white px-6 py-2 rounded-lg font-bold">Сохранить</button>
           </div>
         </form>
