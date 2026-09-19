@@ -5,10 +5,9 @@ import path from 'path';
 import { getSession } from '@/lib/auth';
 
 const s3 = new S3Client({
-  // ИСПРАВЛЕНО: Добавлен второй дефис. Строго 'ru-central-1', как требует Cloud.ru
-  region: 'ru-central-1', 
-  endpoint: 'https://cloud.ru', 
-  forcePathStyle: true, 
+  region: 'ru-central-1',             // Строгий регион для Cloud.ru
+  endpoint: 'https://s3.cloud.ru',     // Официальный эндпоинт хранилища
+  forcePathStyle: true,               // Использование структуры path-style запросов
   credentials: {
     accessKeyId: process.env.S3_ACCESS_KEY || '',
     secretAccessKey: process.env.S3_SECRET_KEY || '',
@@ -33,12 +32,17 @@ export async function POST(request: NextRequest) {
       ContentType: contentType,
     });
 
-    const uploadUrl = await getSignedUrl(s3, command, { expiresIn: 3600 });
-    const fileViewUrl = `https://cloud.ru/mesa-edtech-media-bucket/${uniqueFileName}`;
+    // Генерируем ссылку без вмешательства автоматических подмен хоста со стороны SDK
+    const uploadUrl = await getSignedUrl(s3, command, { 
+      expiresIn: 3600,
+    });
+    
+    // Публичная ссылка для сохранения в базу данных
+    const fileViewUrl = `https://cloud.ru{uniqueFileName}`;
 
     return NextResponse.json({
       success: true,
-      uploadUrl: uploadUrl,     
+      uploadUrl: uploadUrl,     // Ссылка примет верный вид: https://s3.cloud.ru/mesa-edtech-media-bucket/...
       contentType: contentType, 
       url: fileViewUrl       
     });
