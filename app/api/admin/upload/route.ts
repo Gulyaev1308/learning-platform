@@ -22,19 +22,32 @@ export async function POST(request: NextRequest) {
     }
 
     const { fileName, fileSize } = await request.json();
+    
+    if (!fileName || !fileSize) {
+      return NextResponse.json({ error: 'fileName и fileSize обязательны' }, { status: 400 });
+    }
+
     const ext = path.extname(fileName).toLowerCase() || '.mp4';
     const uniqueFileName = `video_${Date.now()}${ext}`;
+    
+    // ИСПРАВЛЕНО: Жёстко фиксируем валидный MIME-тип. 
+    // Cloud.ru сбрасывает Multipart сессию в 500, если тип некорректный.
     const contentType = ext === '.mp4' ? 'video/mp4' : 'application/octet-stream';
 
-    // 1. Инициализируем сессию многокомпонентной загрузки в Cloud.ru
+    // 1. Инициализируем сессию многокомпонентной загрузки
     const createCommand = new CreateMultipartUploadCommand({
       Bucket: 'mesa-edtech-media-bucket',
       Key: uniqueFileName,
-      ContentType: contentType,
+      ContentType: contentType, // Важнейший заголовок для Cloud.ru
     });
+    
     const { UploadId } = await s3.send(createCommand);
 
-    // Устанавливаем размер чанка 10 МБ (для Cloud.ru оптимально)
+    if (!UploadId) {
+      throw new Error('Не удалось получить сессию загрузки (UploadId) от Cloud.ru');
+    }
+
+    // Устанавливаем размер чанка 10 МБ
     const PART_SIZE = 10 * 1024 * 1024; 
     const totalParts = Math.ceil(fileSize / PART_SIZE);
     const urls: string[] = [];
@@ -47,6 +60,7 @@ export async function POST(request: NextRequest) {
         UploadId: UploadId,
         PartNumber: partNumber,
       });
+      // Подписываем только URL, Cloud.ru сам сопоставит чанки по номеру
       const url = await getSignedUrl(s3, partCommand, { expiresIn: 3600 });
       urls.push(url);
     }
@@ -63,6 +77,7 @@ export async function POST(request: NextRequest) {
     });
 
   } catch (error) {
+    console.error('Ошибка на бэкенде S3:', error);
     return NextResponse.json({ error: 'Ошибка S3: ' + (error as Error).message }, { status: 500 });
   }
 }
