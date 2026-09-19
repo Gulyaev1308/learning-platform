@@ -348,69 +348,36 @@ function LessonForm({ lesson, onSave, onCancel }: any) {
     try {
       setUploading(true);
 
-      // 1. Стартуем multipart-загрузку на бэкенде
-      const startRes = await fetch('/api/admin/upload', {
+      const response = await fetch('/api/admin/upload', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'start', fileName: file.name })
+        body: JSON.stringify({ fileName: file.name }),
       });
-      const { uploadId, key } = await startRes.json();
-      if (!uploadId) throw new Error('Не удалось начать загрузку');
+      
+      const data = await response.json();
 
-      const CHUNK_SIZE = 5 * 1024 * 1024; // Нарезаем по 5 МБ
-      const totalChunks = Math.ceil(file.size / CHUNK_SIZE);
-      const uploadedParts = [];
-
-      // 2. В цикле отправляем каждый кусочек видео
-      for (let i = 0; i < totalChunks; i++) {
-        const start = i * CHUNK_SIZE;
-        const end = Math.min(start + CHUNK_SIZE, file.size);
-        const chunkBlob = file.slice(start, end);
-        
-        // Переводим кусочек в Base64 string
-        const arrayBuffer = await chunkBlob.arrayBuffer();
-        const base64Chunk = btoa(
-          new Uint8Array(arrayBuffer).reduce((data, byte) => data + String.fromCharCode(byte), '')
-        );
-
-        const partNumber = i + 1;
-        const uploadRes = await fetch('/api/admin/upload', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            action: 'upload',
-            fileName: key,
-            uploadId,
-            partNumber,
-            chunk: base64Chunk
-          })
-        });
-
-        if (!uploadRes.ok) throw new Error(`Ошибка загрузки части ${partNumber}`);
-        const { ETag } = await uploadRes.json();
-        uploadedParts.push({ ETag, PartNumber: partNumber });
+      if (!response.ok) {
+        throw new Error(data.error || 'Не удалось получить ссылку');
       }
 
-      // 3. Просим бэкенд склеить все части на стороне S3
-      const completeRes = await fetch('/api/admin/upload', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'complete', fileName: key, uploadId, parts: uploadedParts })
+      // Переводим в ArrayBuffer, чтобы fetch шел БЕЗ автоматических Content-Type заголовков
+      const arrayBuffer = await file.arrayBuffer();
+
+      const uploadToS3 = await fetch(data.uploadUrl, {
+        method: 'PUT',
+        body: arrayBuffer,
       });
-      const data = await completeRes.json();
 
-      if (!completeRes.ok || !data.success) {
-        throw new Error(data.error || 'Не удалось завершить склейку файла');
+      if (!uploadToS3.ok) {
+        throw new Error('Облако S3 отклонило загрузку файла');
       }
-
-      // Сохраняем готовую ссылку в базу уроков
+      
       if (formData.type === 'case') {
         setCaseImages(prev => [...prev, data.url]);
       } else {
         setFormData({ ...formData, content: data.url });
       }
       
-      alert('Видео успешно загружено!');
     } catch (error) {
       alert((error as Error).message || 'Ошибка загрузки');
     } finally {
