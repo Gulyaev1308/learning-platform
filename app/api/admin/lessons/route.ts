@@ -32,6 +32,9 @@ export async function POST(request: NextRequest) {
     // Обработка данных квиза
     const dbQuizData = typeof quiz_data === 'object' ? JSON.stringify(quiz_data) : (quiz_data || '[]');
 
+    // Точечный фикс: обходим ограничение базы данных, сохраняя кейс как тип text
+    const dbType = type === 'case' ? 'text' : type;
+
     // ИСПРАВЛЕНО ТОЧЕЧНО: Строго приводим case_images к JSON-строке для корректной записи в поле типа JSONB
     const dbCaseImages = type === 'case' && Array.isArray(case_images) 
       ? JSON.stringify(case_images) 
@@ -50,7 +53,7 @@ export async function POST(request: NextRequest) {
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING id`,
       [
         title, 
-        type, 
+        dbType, 
         content || '', 
         description || '', 
         dbQuizData, 
