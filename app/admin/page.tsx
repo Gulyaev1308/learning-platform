@@ -693,7 +693,7 @@ function LessonForm({ lesson, onSave, onCancel }: any) {
 
           <div>
             <label className="block text-sm font-bold text-gray-900 mb-1">Порядок</label>
-            <input type="number" min="1" value={formData.order_index} onChange={(e) => setFormData({ ...formData, order_index: parseInt(e.target.value) || 1 })} className="w-full px-3 py-2 border-2 border-gray-400 rounded-lg text-gray-900 font-medium" />
+<div className="bg-gray-100 p-3 rounded-lg border border-gray-300"><span className="text-sm text-gray-600 block mb-1">Порядок урока:</span><span className="text-base font-semibold text-gray-800">Автоматически (По дате добавления)</span><input type="hidden" value={1} name="order_index" /></div>
           </div>
 
           <div className="flex justify-end gap-3 pt-4 border-t-2">
