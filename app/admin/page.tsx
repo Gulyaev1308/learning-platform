@@ -443,18 +443,43 @@ function LessonForm({ lesson, onSave, onCancel }: any) {
       }
       const homework_data = showHomework ? homeworkText : '';
 
-      // Формируем payload с проверенным финальным URL видео
-      const savePayload: any = { ...formData, content: finalFileUrl, quiz_data, homework_data };
+      // Логируем финальное состояние перед сборкой payload для PostgreSQL
+      console.log(`[SUBMIT_TRANS_LOG] Сборка payload. Тип урока: ${formData.type}, Итоговый URL файла: ${finalFileUrl}`);
 
+      // Формируем базовый объект для сохранения
+      const savePayload: any = { ...formData, quiz_data, homework_data };
+
+      // СТРОГОЕ РАЗДЕЛЕНИЕ ТИПОВ УРОКОВ (Точечный фикс)
       if (formData.type === 'case') {
-        // Если загружался файл для кейса, пушим его в массив картинок
-        savePayload.case_images = localFile ? [...caseImages, finalFileUrl] : caseImages;
+        // 1. Если это КЕЙС, то загруженный файл — это картинка результата. Пушим её в массив картинок.
+        savePayload.case_images = localFile && finalFileUrl ? [...caseImages, finalFileUrl] : caseImages;
+        
+        // Поле content для кейса оставляем пустым или сохраняем то, что ввел админ в текстовое поле
+        savePayload.content = formData.content.startsWith('/videos/') ? '' : formData.content;
+
         savePayload.case_details = {
           duration: duration.trim(),
           resultText: resultText.trim(),
           products: products.split(',').map(p => p.trim()).filter(Boolean)
         };
+      } else if (formData.type === 'video') {
+        // 2. Если это ВИДЕОУРОК, то в поле content должна улетать СТРОГО ссылка на наш API-прокси
+        if (localFile && finalFileUrl) {
+          savePayload.content = finalFileUrl; // Сюда запишется рабочий путь /api/videos/video_xxxx.mp4
+        } else {
+          savePayload.content = formData.content;
+        }
+        // Зануляем поля кейса, чтобы структура БД оставалась чистой
+        savePayload.case_images = [];
+        savePayload.case_details = null;
+      } else {
+        // 3. Для текстовых или квиз уроков просто сохраняем контент как есть
+        savePayload.content = formData.content;
+        savePayload.case_images = [];
+        savePayload.case_details = null;
       }
+
+      console.log('[DATABASE_SAVE_ACTION] Отправка payload в родительский метод onSave:', JSON.stringify(savePayload));
 
       console.log('=== [DATABASE_SAVE] Фиксация данных урока в PostgreSQL ===');
       await onSave(savePayload);
