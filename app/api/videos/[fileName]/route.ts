@@ -36,7 +36,36 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     return NextResponse.redirect(signedUrl, { status: 302 });
 
   } catch (error: any) {
-    console.error(`[VIDEO_REDIRECT_CRITICAL] Критическая ошибка роута видео для ${decodedKey}:`, error.message);
-    return NextResponse.json({ error: 'Внутренняя ошибка авторизации медиапотока' }, { status: 500 });
+    // === СВЕРХГЛУБОКОЕ ТОЧЕЧНОЕ ЛОГИРОВАНИЕ ДЛЯ ОПРЕДЕЛЕНИЯ КОРНЯ ПРОБЛЕМЫ ===
+    console.error(`[VIDEO_PROXY_CRITICAL] Произошел сбой. Имя ошибки: ${error?.name} | Сообщение: ${error?.message}`);
+    
+    // ИСПРАВЛЕНО ДЛЯ TYPESCRIPT: Обращаемся через строковый ключ, чтобы обойти ошибку компиляции
+    const s3Response = error ? error['\$response'] : null;
+
+    if (s3Response) {
+      console.error(`[S3_RAW_RESPONSE_STATUS] HTTP Status: ${s3Response.statusCode}`);
+      
+      if (s3Response.body) {
+        try {
+          const rawBody = s3Response.body;
+          // Переводим тело ответа шлюза Cloud.ru в читаемый текст
+          console.error(`[S3_RAW_XML_BODY]:`, rawBody.toString('utf-8'));
+        } catch (e: any) {
+          console.error(`[S3_RAW_BODY_READ_FAIL] Не удалось прочитать тело ответа: ${e.message}`);
+        }
+      }
+      
+      if (s3Response.headers) {
+        console.error(`[S3_RAW_HEADERS]:`, JSON.stringify(s3Response.headers));
+      }
+    } else {
+      console.error(`[S3_NO_RESPONSE_OBJECT] Объект скрытого ответа $response отсутствует в ошибке.`);
+    }
+    // =======================================================================
+
+    return NextResponse.json({ 
+      error: 'Ошибка сервера при чтении видеопотока', 
+      details: error?.message 
+    }, { status: 500 });
   }
 }
