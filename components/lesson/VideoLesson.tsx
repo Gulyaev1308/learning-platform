@@ -8,16 +8,14 @@ interface VideoLessonProps {
 }
 
 export default function VideoLesson({ content, title, onEnded, onStart }: VideoLessonProps) {
-  console.log('VideoLesson content:', content);
+  // ДИАГНОСТИКА: Логируем то, что компонент физически получил в пропсы
+  console.log(`[VIDEO_PLAYER_AUDIT] Компонент смонтирован. Title: "${title}" | Content: "${content}"`);
 
-  // VK Video — поддерживаем ВСЕ ссылки VK
+  // VK Video
   if (content && (content.includes('://vk.com') || content.includes('vkvideo.ru'))) {
     const match = content.match(/(-?\d+)_(\d+)/);
     const oid = match?.[1] || '';
     const videoId = match?.[2] || '';
-
-    console.log('VK oid:', oid, 'videoId:', videoId);
-
     return (
       <div className="space-y-4">
         <div className="relative w-full aspect-video bg-black rounded-lg overflow-hidden">
@@ -51,19 +49,34 @@ export default function VideoLesson({ content, title, onEnded, onStart }: VideoL
     );
   }
 
-  // Локальное видео и стриминг из Cloud.ru Object Storage через API-прокси
+  // Локальное видео и стриминг через API-прокси
   if (content && content.startsWith('/')) {
     return (
       <div className="bg-black rounded-lg overflow-hidden aspect-video shadow-lg">
         <video 
-          key={content}         // ИСПРАВЛЕНО: Принудительно сбрасывает и запускает плеер в React при смене ссылки
-          controls              // Показывает встроенные элементы управления (Play/Пауза/Громкость/Таймлайн)
-          playsInline           // Обеспечивает воспроизведение на мобильных устройствах и iOS
-          preload="metadata"    // Считывает длительность и метаданные ролика
+          key={content}
+          controls
+          playsInline
+          preload="auto"
           className="w-full h-full object-contain" 
           src={content} 
           onEnded={onEnded} 
-          onPlay={onStart} 
+          onPlay={() => {
+            console.log(`[VIDEO_PLAYER_EVENT] Воспроизведение успешно запущено для: ${content}`);
+            if (onStart) onStart();
+          }}
+          // СКВОЗНОЙ АУДИТ ОШИБОК ПЛЕЕРА БРАУЗЕРА
+          onLoadStart={() => console.log(`[VIDEO_PLAYER_EVENT] Браузер начал загрузку медиа по ссылке: ${content}`)}
+          onCanPlay={() => console.log('[VIDEO_PLAYER_EVENT] Браузер загрузил достаточно байт и готов к старту')}
+          onWaiting={() => console.warn('[VIDEO_PLAYER_EVENT] Плеер ушел в буферизацию (ожидание байт)')}
+          onError={(e) => {
+            const videoEl = e.currentTarget;
+            console.error('[VIDEO_PLAYER_CRITICAL_ERROR] Сбой элемента <video>:', {
+              code: videoEl.error?.code,
+              message: videoEl.error?.message,
+              currentSrc: videoEl.currentSrc
+            });
+          }}
         />
       </div>
     );

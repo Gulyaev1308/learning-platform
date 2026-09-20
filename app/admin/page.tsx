@@ -356,7 +356,7 @@ function LessonForm({ lesson, onSave, onCancel }: any) {
     console.log(`[FRONTEND_LOG] Файл "${file.name}" выбран локально и ждет нажатия кнопки "Сохранить".`);
     
     // Показываем в интерфейсе админки, что файл успешно прикреплен к форме
-    setFormData(prev => ({ ...prev, content: `/videos/${file.name}` }));
+    setFormData(prev => ({ ...prev, content: URL.createObjectURL(file) }));
   };
 
   const handleCancelUploadOrForm = async () => {
@@ -618,8 +618,8 @@ function LessonForm({ lesson, onSave, onCancel }: any) {
                 <label className="block text-sm font-bold text-gray-900 mb-2">Или URL</label>
                 <input type="text" value={formData.content} onChange={(e) => setFormData({ ...formData, content: e.target.value })} placeholder="/videos/my-video.mp4" className="w-full px-3 py-2 border border-gray-400 rounded-lg text-gray-900" />
               </div>
-              {formData.content && formData.content.startsWith('/videos/') && (
-                <video src={formData.content} controls className="w-full max-h-40 rounded bg-black" />
+              {formData.content && (formData.content.startsWith('blob:') || formData.content.includes('/api/videos/')) && (
+                <video key={formData.content} src={formData.content} controls className="w-full max-h-40 rounded bg-black" />
               )}
             </div>
           ) : (
