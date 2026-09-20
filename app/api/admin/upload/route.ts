@@ -7,7 +7,9 @@ import { getSession } from '@/lib/auth';
 const s3 = new S3Client({
   region: 'ru-central-1', 
   endpoint: 'https://s3.cloud.ru', 
-  forcePathStyle: true, 
+  // ИСПРАВЛЕНО ДЛЯ CLOUD.RU EVOLUTION: Отключаем forcePathStyle,
+  // чтобы подписанные ссылки генерировались в правильном формате bucket.s3.cloud.ru
+  forcePathStyle: false, 
   credentials: {
     accessKeyId: process.env.S3_ACCESS_KEY || '',
     secretAccessKey: process.env.S3_SECRET_KEY || '',
@@ -40,10 +42,7 @@ export async function GET(request: NextRequest) {
       ContentType: fileTypeByExt(ext),
     });
 
-    // Генерация подписанной ссылки для прямой загрузки с фронтенда в Cloud.ru
     const uploadUrl = await getSignedUrl(s3, command, { expiresIn: 3600 });
-    
-    // ИСПРАВЛЕНО: Формируем правильный путь для твоего прокси-роута видеоплейера /api/videos/
     const fileViewUrl = `/api/videos/${uniqueFileName}`;
 
     console.log(`[S3_UPLOAD_SUCCESS] Ссылки успешно созданы. fileUrl для БД: ${fileViewUrl}`);
@@ -51,7 +50,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ uploadUrl, fileUrl: fileViewUrl });
   } catch (error: any) {
     console.error('[API_ERROR] [GET /api/admin/upload] Ошибка:', error.message, error.stack);
-    return NextResponse.json({ error: (error as Error).message }, { status: 500 });
+    return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }
 
@@ -70,7 +69,6 @@ export async function DELETE(request: NextRequest) {
 
     console.log(`[S3_CLEANUP_LOG] Запрос на удаление файла. Получен URL: ${fileUrl}`);
 
-    // Извлекаем чистое имя файла из ссылки (поддерживает как полные URL, так и относительные /api/videos/name)
     const key = fileUrl.split('/').pop();
 
     if (!key || key === 'videos' || key === 'cloud.ru{uniqueFileName}') {
@@ -90,11 +88,10 @@ export async function DELETE(request: NextRequest) {
     return NextResponse.json({ success: true });
   } catch (error: any) {
     console.error('[API_ERROR] [DELETE /api/admin/upload] Ошибка очистки:', error.message, error.stack);
-    return NextResponse.json({ error: (error as Error).message }, { status: 500 });
+    return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }
 
-// Вспомогательная функция для точного определения Content-Type
 function fileTypeByExt(ext: string): string {
   const types: Record<string, string> = {
     '.mp4': 'video/mp4',
