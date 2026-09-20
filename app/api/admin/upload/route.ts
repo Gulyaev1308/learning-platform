@@ -4,17 +4,15 @@ import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import path from 'path';
 import { getSession } from '@/lib/auth';
 
-// НАСТРОЙКА ПО СТАНДАРТУ CLOUD.RU EVOLUTION
+// Жестко отключаем кэширование Next.js для этого API-роута
+export const dynamic = 'force-dynamic';
+
+// НАСТРОЙКА ПО ОФИЦИАЛЬНОЙ СПЕЦИФИКАЦИИ CLOUD.RU EVOLUTION S3
 const s3 = new S3Client({
   region: 'ru-central-1',
   endpoint: 'https://s3.cloud.ru', 
   bucketEndpoint: false, 
   forcePathStyle: true,
-  // ХАК ДЛЯ AWS SDK: Переопределяем встроенный провайдер эндпоинтов, 
-  // чтобы он принудительно возвращал ровно то, что мы указали в endpoint
-  endpointProvider: () => ({
-    url: new URL('https://s3.cloud.ru'),
-  }),
   credentials: {
     accessKeyId: process.env.S3_ACCESS_KEY || '',
     secretAccessKey: process.env.S3_SECRET_KEY || '',
@@ -39,7 +37,7 @@ export async function GET(request: NextRequest) {
     const ext = path.extname(fileName).toLowerCase() || '.mp4';
     const uniqueFileName = `video_${Date.now()}${ext}`;
 
-    console.log(`[S3_UPLOAD_LOG] Стандартная генерация ссылки. Файл: ${uniqueFileName}`);
+    console.log(`[S3_UPLOAD_LOG] [V2_DEEP_LOG] Запрос на генерацию для файла: ${uniqueFileName}`);
 
     const command = new PutObjectCommand({
       Bucket: BUCKET_NAME,
@@ -47,10 +45,19 @@ export async function GET(request: NextRequest) {
       ContentType: fileTypeByExt(ext),
     });
 
-    // Генерируем чистую ссылку — теперь она будет строго формата: https://cloud.ru/video_xxxx.mp4
-    const uploadUrl = await getSignedUrl(s3, command, { expiresIn: 3600 });
+    // Генерируем оригинальную пресайнд-ссылку
+    let uploadUrl = await getSignedUrl(s3, command, { expiresIn: 3600 });
+    
+    // ГЛУБОКИЙ ФИКС: Если баг резолвера AWS SDK v3 стёр поддомен s3, принудительно восстанавливаем его,
+    // чтобы Signature V4 и хост шлюза Cloud.ru отработали без CORS-ошибок в браузере.
+    if (uploadUrl.startsWith('https://cloud.ru')) {
+      uploadUrl = uploadUrl.replace('https://cloud.ru', 'https://s3.cloud.ru');
+    }
+
     const fileViewUrl = `/api/videos/${uniqueFileName}`;
 
+    // ВЫВОДИМ РЕАЛЬНЫЙ URL В ЛОГИ СЕРВЕРА ДЛЯ СТРОГОГО АУДИТА
+    console.log(`[S3_DEBUG_URL] Финальный URL отправленный фронтенду: ${uploadUrl}`);
     console.log(`[S3_UPLOAD_SUCCESS] Ссылка по стандарту Cloud.ru создана: ${fileViewUrl}`);
 
     return NextResponse.json({ uploadUrl, fileUrl: fileViewUrl });
