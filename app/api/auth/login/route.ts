@@ -7,23 +7,32 @@ export async function POST(request: NextRequest) {
   try {
     const { email, password } = await request.json();
     
-    // Делаем запрос к PostgreSQL
-    const result = await db.query('SELECT * FROM users WHERE email = $1', [email]);
+    // ДЕБАГ ЛОГ 1: Что прислал фронтенд
+    console.log(`[AUTH_DEBUG] Попытка входа. Email: "${email}", Длина пароля: ${password ? password.length : 0}`);
     
-    // ИСПРАВЛЕНО: Квадратные скобки [0] вместо круглых (0) для получения первой строки!
+    const result = await db.query('SELECT * FROM users WHERE email = \$1', [email]);
     const user = result.rows[0];
     
     if (!user) {
+      console.warn(`[AUTH_DEBUG] Пользователь с email "${email}" НЕ НАЙДЕН в базе данных PostgreSQL.`);
       return NextResponse.json({ error: 'Неверный email или пароль' }, { status: 401 });
     }
+    
+    // ДЕБАГ ЛОГ 2: Что реально лежит в базе данных
+    console.log(`[AUTH_DEBUG] Пользователь найден. ID: ${user.id}, Роль: "${user.role}", Имя: "${user.name}"`);
+    console.log(`[AUTH_DEBUG] Хэш из БД: "${user.password_hash}", Длина хэша: ${user.password_hash ? user.password_hash.length : 0}`);
     
     // Сравниваем хэш пароля из базы
     const match = await bcrypt.compare(password, user.password_hash);
+    
+    // ДЕБАГ ЛОГ 3: Результат сравнения bcrypt
+    console.log(`[AUTH_DEBUG] Результат сравнения bcrypt.compare(): ${match}`);
+    
     if (!match) {
+      console.warn(`[AUTH_DEBUG] Пароль не совпал с хэшем для пользователя "${email}".`);
       return NextResponse.json({ error: 'Неверный email или пароль' }, { status: 401 });
     }
     
-    // Создаем сессию
     await createSession({ 
       userId: user.id, 
       email: user.email, 
@@ -31,13 +40,13 @@ export async function POST(request: NextRequest) {
       role: user.role 
     });
     
-    // Перенаправляем по ролям
     const redirect = user.role === 'leader' ? '/leader' : user.role === 'admin' ? '/admin' : '/dashboard';
+    console.log(`[AUTH_DEBUG] Сессия успешно создана. Редирект на: ${redirect}`);
+    
     return NextResponse.json({ success: true, redirect });
     
-  } catch (e) {
-    // ВАЖНО: Выводим ошибку в консоль сервера, чтобы она не глушилась!
-    console.error("🚨 КРИТИЧЕСКАЯ ОШИБКА АВТОРИЗАЦИИ:", e);
+  } catch (e: any) {
+    console.error("🚨 КРИТИЧЕСКАЯ ОШИБКА АВТОРИЗАЦИИ:", e.message, e.stack);
     return NextResponse.json({ error: 'Ошибка сервера' }, { status: 500 });
   }
 }
