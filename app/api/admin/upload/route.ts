@@ -8,7 +8,7 @@ import { getSession } from '@/lib/auth';
 const s3 = new S3Client({
   region: 'ru-central-1',
   // Меням внутренний адрес на публичный, доступный из браузеров пользователей
-  endpoint: 'https://cloud.ru', 
+  endpoint: 'https://s3.cloud.ru', 
   bucketEndpoint: false, 
   forcePathStyle: true,
   credentials: {
