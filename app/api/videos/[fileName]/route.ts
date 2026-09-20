@@ -14,83 +14,66 @@ const s3 = new S3Client({
 
 const BUCKET_NAME = 'mesa-edtech-media-bucket';
 
-// Вспомогательная функция для перевода потока S3 в Uint8Array (Next.js Response)
-async function streamToBuffer(stream: Readable): Promise<Buffer> {
-  const chunks: any[] = [];
-  return new Promise((resolve, reject) => {
-    stream.on('data', (chunk) => chunks.push(chunk));
-    stream.on('error', reject);
-    stream.on('end', () => resolve(Buffer.concat(chunks)));
-  });
-}
-
 export async function GET(request: NextRequest, { params }: { params: Promise<{ fileName: string }> }) {
-  const { fileName } = await params;
+  // Точечно декодируем имя файла, чтобы исключить баги с %20, %7B и т.д.
+  const rawFileName = (await params).fileName;
+  const fileName = decodeURIComponent(rawFileName);
   
   try {
-    console.log(`[VIDEO_PROXY_START] Студент запросил воспроизведение файла: ${fileName}`);
-
-    // 1. Формируем запрос к Cloud.ru Object Storage
-    const command = new GetObjectCommand({
-      Bucket: BUCKET_NAME,
-      Key: fileName,
-    });
-
-    const s3Response = await s3.send(command);
-    
-    if (!s3Response.Body) {
-      console.error(`[VIDEO_PROXY_ERROR] Пустое тело ответа S3 для файла: ${fileName}`);
-      return NextResponse.json({ error: 'Контент файла пуст' }, { status: 404 });
-    }
-
-    // Получаем полный размер файла из метаданных S3
-    const totalLength = s3Response.ContentLength || 0;
-    
-    // Преобразуем поток из S3 в буфер для нарезки чанков
-    const buffer = await streamToBuffer(s3Response.Body as Readable);
-    const uint8Array = new Uint8Array(buffer);
+    console.log(`[VIDEO_PROXY_START] Студент затребовал поток файла: "${fileName}"`);
 
     const rangeHeader = request.headers.get('range');
 
-    // 2. Обработка стриминга частями (для перемотки в плеере)
+    // 1. Формируем опции для запроса к Cloud.ru. Если есть Range, пробрасываем его прямо в S3!
+    const s3Params: any = {
+      Bucket: BUCKET_NAME,
+      Key: fileName,
+    };
+
     if (rangeHeader) {
-      const parts = rangeHeader.replace(/bytes=/, '').split('-');
-      const start = parseInt(parts[0], 10);
-      const end = parts[1] ? parseInt(parts[1], 10) : totalLength - 1;
-      
-      const chunk = uint8Array.slice(start, end + 1);
-
-      console.log(`[VIDEO_PROXY_STREAM] Отдача чанка для ${fileName}: bytes ${start}-${end}/${totalLength}`);
-
-      return new NextResponse(chunk, {
-        status: 206,
-        headers: {
-          'Content-Type': s3Response.ContentType || 'video/mp4',
-          'Content-Range': `bytes ${start}-${end}/${totalLength}`,
-          'Accept-Ranges': 'bytes',
-          'Content-Length': (end - start + 1).toString(),
-        },
-      });
+      s3Params.Range = rangeHeader;
     }
 
-    // 3. Отдача файла целиком (если плеер не запросил range)
-    console.log(`[VIDEO_PROXY_SUCCESS] Отдача файла целиком: ${fileName}, размер: ${totalLength} байт`);
-    return new NextResponse(uint8Array, {
-      headers: {
-        'Content-Type': s3Response.ContentType || 'video/mp4',
-        'Content-Length': totalLength.toString(),
-        'Accept-Ranges': 'bytes',
-      },
+    const command = new GetObjectCommand(s3Params);
+    const s3Response = await s3.send(command);
+    
+    if (!s3Response.Body) {
+      console.error(`[VIDEO_PROXY_ERROR] Тело ответа от Cloud.ru пущено для ключа: ${fileName}`);
+      return NextResponse.json({ error: 'Файл пуст' }, { status: 404 });
+    }
+
+    // Твой плеер требует правильные заголовки для перемотки
+    const responseHeaders = new Headers();
+    responseHeaders.set('Content-Type', s3Response.ContentType || 'video/mp4');
+    responseHeaders.set('Accept-Ranges', 'bytes');
+    
+    if (s3Response.ContentRange) {
+      responseHeaders.set('Content-Range', s3Response.ContentRange);
+    }
+    if (s3Response.ContentLength) {
+      responseHeaders.set('Content-Length', s3Response.ContentLength.toString());
+    }
+
+    // Переводим веб-стрим в нативный читаемый поток Next.js без забивания RAM буферами
+    const stream = s3Response.Body as Readable;
+
+    console.log(`[VIDEO_PROXY_STREAM_OK] Стриминг файла ${fileName} успешно инициирован. Range: ${rangeHeader || 'нет'}`);
+    
+    return new NextResponse(stream as any, {
+      status: rangeHeader ? 206 : 200,
+      headers: responseHeaders,
     });
 
   } catch (error: any) {
-    // Точечное перехватывание ошибки отсутствия файла в S3
-    if (error.name === 'NoSuchKey') {
-      console.error(`[VIDEO_PROXY_404] Файл не найден в бакете Cloud.ru: ${fileName}`);
-      return NextResponse.json({ error: 'Видеофайл не найден в облачном хранилище' }, { status: 404 });
+    if (error.name === 'NoSuchKey' || error.code === 'NoSuchKey') {
+      console.error(`[VIDEO_PROXY_404] Файл "${fileName}" физически отсутствует в бакете Cloud.ru!`);
+      return NextResponse.json({ 
+        error: 'Видеофайл не найден в облаке', 
+        hint: 'Убедитесь, что имя файла в БД совпадает с именем в Object Storage' 
+      }, { status: 404 });
     }
 
-    console.error(`[VIDEO_PROXY_CRITICAL] Ошибка проксирования видео ${fileName}:`, error.message, error.stack);
-    return NextResponse.json({ error: 'Ошибка сервера при чтении из S3' }, { status: 500 });
+    console.error(`[VIDEO_PROXY_CRITICAL] Критический сбой прокси для файла ${fileName}:`, error.message);
+    return NextResponse.json({ error: 'Ошибка сервера при стриминге из S3' }, { status: 500 });
   }
 }
