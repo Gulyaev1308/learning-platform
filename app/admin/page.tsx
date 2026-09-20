@@ -539,6 +539,19 @@ function LessonForm({ lesson, onSave, onCancel }: any) {
                 </label>
                 {uploading && <p className="text-emerald-700 text-sm mt-1 font-semibold">Загрузка...</p>}
                 
+                {/* ТОЧЕЧНЫЙ ВЫВОД ПРЕВЬЮ КАРТИНКИ ИЛИ ВИДЕО ПЕРЕД СОХРАНЕНИЕМ КЕЙСА */}
+                {localFile && (
+                  <div className="mt-4 p-3 bg-white rounded-lg border border-emerald-300 flex flex-col items-center">
+                    <p className="text-xs text-emerald-700 font-bold mb-2">📸 Файл готов к загрузке в Cloud.ru:</p>
+                    {localFile.type.startsWith('image/') ? (
+                      <img src={URL.createObjectURL(localFile)} alt="Превью" className="max-h-64 rounded-lg object-contain border" />
+                    ) : (
+                      <video src={URL.createObjectURL(localFile)} className="max-h-64 rounded-lg border" controls />
+                    )}
+                    <span className="text-xs text-gray-600 mt-2 font-mono bg-gray-100 px-2 py-1 rounded">{localFile.name}</span>
+                  </div>
+                )}
+
                 {/* Интерактивное превью уже загруженных картинок для кейса с кнопкой удаления */}
                 {caseImages.length > 0 && (
                   <div className="flex gap-2 mt-3 overflow-x-auto pb-2">

@@ -5,8 +5,6 @@ import { useRouter, useParams } from 'next/navigation';
 
 export default function LessonPage() {
   const router = useRouter();
-  
-  // ИСПРАВЛЕНО СТРОГО ПО СТАНДАРТАМ TS: Явная безопасная типизация динамического параметра
   const params = useParams();
   const lessonId = params ? (params.id as string) : '';
   
@@ -17,6 +15,10 @@ export default function LessonPage() {
   const [answers, setAnswers] = useState<any>({});
   const [sending, setSending] = useState(false);
 
+  // Состояния для парсинга данных MLM кейса
+  const [caseImages, setCaseImages] = useState<string[]>([]);
+  const [caseDetails, setCaseDetails] = useState<any>(null);
+
   useEffect(() => {
     async function fetchLesson() {
       try {
@@ -24,8 +26,26 @@ export default function LessonPage() {
         const data = await res.json();
         if (data.success && data.lesson) {
           setLesson(data.lesson);
+          
+          // Парсим квизы
           if (data.lesson.quiz_data) {
             setQuizContent(typeof data.lesson.quiz_data === 'string' ? JSON.parse(data.lesson.quiz_data) : data.lesson.quiz_data);
+          }
+
+          // Парсим данные картинок кейса
+          if (data.lesson.case_images) {
+            const imgs = typeof data.lesson.case_images === 'string' 
+              ? JSON.parse(data.lesson.case_images) 
+              : data.lesson.case_images;
+            setCaseImages(Array.isArray(imgs) ? imgs : []);
+          }
+
+          // Парсим детали кейса
+          if (data.lesson.case_details) {
+            const details = typeof data.lesson.case_details === 'string'
+              ? JSON.parse(data.lesson.case_details)
+              : data.lesson.case_details;
+            setCaseDetails(details);
           }
         }
       } catch (err) {
@@ -77,6 +97,9 @@ export default function LessonPage() {
     videoSrc = `/api/videos/${fileName}`;
   }
 
+  // Флаг проверки: является ли этот урок сохраненным кейсом результатов
+  const isCaseLayout = caseImages.length > 0 || (caseDetails && (caseDetails.duration || caseDetails.resultText || (caseDetails.products && caseDetails.products.length > 0)));
+
   return (
     <div className="min-h-screen w-full bg-white text-gray-900 p-4 sm:p-6 lg:p-8">
       <div className="max-w-7xl mx-auto space-y-6">
@@ -87,9 +110,70 @@ export default function LessonPage() {
           </button>
         </div>
         
+        {/* БЛОК 1: СТАНДАРТНЫЙ ВИДЕОПЛЕЕР */}
         {hasVideo && videoSrc && (
           <div className="w-full bg-black rounded-2xl overflow-hidden shadow-2xl aspect-video max-h-[70vh] mx-auto">
             <video src={videoSrc} controls controlsList="nodownload" onEnded={() => setVideoEnded(true)} className="w-full h-full object-contain" />
+          </div>
+        )}
+
+        {/* БЛОК 2: ИНФОРМАТИВНЫЙ MLM-КЕЙС РЕЗУЛЬТАТОВ (Отображается, если есть данные кейса) */}
+        {isCaseLayout && (
+          <div className="bg-emerald-50 rounded-2xl border border-emerald-200 p-6 space-y-6 shadow-sm">
+            <div className="flex items-center gap-2 border-b border-emerald-200 pb-3">
+              <span className="text-2xl">🌱</span>
+              <h3 className="text-lg font-bold text-emerald-950">Кейс результатов Siberian Wellness</h3>
+            </div>
+
+            {/* ГАЛЕРЕЯ ФОТО КЕЙСА */}
+            {caseImages.length > 0 && (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {caseImages.map((img, idx) => (
+                  <div key={idx} className="bg-white p-2 rounded-xl border border-emerald-100 shadow-sm flex flex-col items-center">
+                    <img src={img} alt={`Результат ${idx + 1}`} className="max-h-[50vh] rounded-lg object-contain w-full" />
+                    <span className="text-xs text-gray-500 mt-2 font-medium">Фотофиксация результата #{idx + 1}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* ОПЦИОНАЛЬНОЕ ПОЛЕ: СРОК ПРИМЕНЕНИЯ ПРОГРАММЫ */}
+            {caseDetails?.duration && caseDetails.duration.trim() !== '' && (
+              <div className="bg-white p-4 rounded-xl border border-emerald-100">
+                <h4 className="text-xs font-bold text-emerald-800 uppercase tracking-wider mb-1">⏱️ Срок применения программы:</h4>
+                <p className="text-sm text-gray-800 font-semibold">{caseDetails.duration}</p>
+              </div>
+            )}
+
+            {/* ОПЦИОНАЛЬНОЕ ПОЛЕ: ИСПОЛЬЗУЕМЫЕ ПРОДУКТЫ SIBERIAN WELLNESS */}
+            {caseDetails?.products && caseDetails.products.length > 0 && (
+              <div className="bg-white p-4 rounded-xl border border-emerald-100">
+                <h4 className="text-xs font-bold text-emerald-800 uppercase tracking-wider mb-2">📦 Продукты Siberian Wellness в кейсе:</h4>
+                <div className="flex flex-wrap gap-2">
+                  {caseDetails.products.map((product: string, index: number) => (
+                    <span key={index} className="px-3 py-1 bg-emerald-100 border border-emerald-200 text-emerald-900 rounded-full text-xs font-bold">
+                      {product}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* ОПЦИОНАЛЬНОЕ ПОЛЕ: ИТОГОВЫЙ ВЫВОД И РЕЗУЛЬТАТ */}
+            {caseDetails?.resultText && caseDetails.resultText.trim() !== '' && (
+              <div className="bg-white p-4 rounded-xl border border-emerald-100">
+                <h4 className="text-xs font-bold text-emerald-800 uppercase tracking-wider mb-1">📝 Итоговый вывод / Описание изменений:</h4>
+                <p className="text-sm text-gray-800 leading-relaxed whitespace-pre-wrap font-medium">{caseDetails.resultText}</p>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ОСНОВНОЙ КОНТЕНТ УРОКА (ЕСЛИ ЗАПОЛНЕН) */}
+        {lesson.content && lesson.content.trim() !== '' && !hasVideo && (
+          <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-sm">
+            <h2 className="text-base font-bold text-gray-900 mb-2">Материал урока:</h2>
+            <div className="text-sm text-gray-800 leading-relaxed whitespace-pre-wrap font-medium">{lesson.content}</div>
           </div>
         )}
 
@@ -106,7 +190,7 @@ export default function LessonPage() {
               <>
                 <h2 className="text-lg font-semibold text-blue-900 flex items-center gap-2">
                   📋 Тест / Опрос к уроку: 
-                  {!isActionAvailable && <span className="text-xs text-amber-700 bg-amber-100 px-3 py-1 rounded-full ml-2 font-medium">Доступно после просмотра video</span>}
+                  {!isActionAvailable && <span className="text-xs text-amber-700 bg-amber-100 px-3 py-1 rounded-full ml-2 font-medium">Доступно после просмотра видео</span>}
                 </h2>
                 {isActionAvailable && quizContent.questions.map((q: any, i: number) => (
                   <div key={i} className="bg-white p-4 rounded-xl border border-gray-200">
