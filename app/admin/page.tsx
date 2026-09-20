@@ -343,121 +343,31 @@ function LessonForm({ lesson, onSave, onCancel }: any) {
   }, [lesson]);
 
   const [abortController, setAbortController] = useState<AbortController | null>(null);
-  const [uploadedFileUrl, setUploadedFileUrl] = useState<string>(''); 
+  const [uploadedFileUrl, setUploadedFileUrl] = useState<string>('');
+  const [localFile, setLocalFile] = useState<File | null>(null);
+  const [uploadProgress, setUploadProgress] = useState<string>('0.00'); // Для вывода % в кнопку сохранения
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files ? e.target.files[0] : null; // Строго первый файл
     if (!file) return;
-    setUploading(true);
 
-    // Создаем стандартный контроллер отмены
-    const controller = new AbortController();
-    setAbortController(controller);
-
-    try {
-      console.log('=== [FRONTEND LOG: Шаг 1 — Запрос подписанной ссылки] ===');
-
-      const response = await fetch(`/api/admin/upload?fileName=${encodeURIComponent(file.name)}`, {
-        method: 'GET'
-      });
-      
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.error || 'Не удалось сгенерировать ссылку');
-
-      console.log('=== [FRONTEND LOG: Шаг 2 — Прямая трансляция в S3 с мониторингом] ===');
-
-      const xhr = new XMLHttpRequest();
-
-      // СВЯЗУЮЩИЙ МОСТ: Принудительно обрываем XHR, если сработал триггер AbortController
-      controller.signal.addEventListener('abort', () => {
-        xhr.abort();
-      });
-
-      // НАСТРОЙКА РЕАЛЬНОГО ПРОГРЕСС-БАРА В КОНСОЛИ БРАУЗЕРА
-      xhr.upload.onprogress = (event) => {
-        if (event.lengthComputable) {
-          const percentComplete = ((event.loaded / event.total) * 100).toFixed(2);
-          const loadedMB = (event.loaded / 1024 / 1024).toFixed(2);
-          const totalMB = (event.total / 1024 / 1024).toFixed(2);
-          
-          console.log(`[PROGRESSBAR] Загрузка: ${percentComplete}% (${loadedMB} MB из ${totalMB} MB)`);
-        }
-      };
-
-      const uploadPromise = () => new Promise((resolve, reject) => {
-        xhr.open('PUT', data.uploadUrl, true);
-        xhr.setRequestHeader('Content-Type', file.type || 'video/mp4');
-
-        xhr.onload = () => {
-          if (xhr.status >= 200 && xhr.status < 300) {
-            resolve(xhr.response);
-          } else {
-            reject(new Error(`S3 отклонил загрузку, статус: ${xhr.status}`));
-          }
-        };
-
-        xhr.onerror = () => reject(new Error('Сетевая ошибка при загрузке в S3.'));
-        xhr.onabort = () => {
-          console.log('=== [FRONTEND LOG: Сетевой поток принудительно остановлен сокетом] ===');
-          reject(new Error('AbortError'));
-        };
-
-        xhr.send(file);
-      });
-
-      await uploadPromise();
-
-      console.log('=== [FRONTEND LOG: Успешно доставлено в S3] ===', data.fileUrl);
-      setUploadedFileUrl(data.fileUrl); 
-
-      if (formData.type === 'case') {
-        setCaseImages(prev => [...prev, data.fileUrl]);
-      } else {
-        setFormData({ ...formData, content: data.fileUrl });
-      }
-
-      alert('Файл успешно загружен напрямую в облако! Нажмите "Сохранить" в форме, чтобы зафиксировать изменения.');
-      
-    } catch (error: any) {
-      if (error.message === 'AbortError' || error.name === 'AbortError') {
-        alert('Загрузка видео успешно остановлена.');
-      } else {
-        console.error(error);
-        alert(error.message || 'Ошибка отправки файла');
-      }
-    } finally {
-      setUploading(false);
-      setAbortController(null);
-    }
+    // ИСПРАВЛЕНО ТРАНЗАКЦИОННО: Не трогаем сеть, просто запоминаем файл в памяти
+    setLocalFile(file);
+    console.log(`[FRONTEND_LOG] Файл "${file.name}" выбран локально и ждет нажатия кнопки "Сохранить".`);
+    
+    // Показываем в интерфейсе админки, что файл успешно прикреплен к форме
+    setFormData(prev => ({ ...prev, content: `/videos/${file.name}` }));
   };
 
   const handleCancelUploadOrForm = async () => {
-    // 1. Мгновенно вызываем метод отмены на стандартном AbortController
     if (abortController) {
       abortController.abort();
     }
+    // Просто очищаем стейты локальной памяти — в S3 ничего не отправлялось
+    setLocalFile(null);
+    setUploadProgress('0.00');
+    console.log('[FRONTEND_LOG] Действие отменено. Локальные данные очищены, бакет Cloud.ru не затронут.');
 
-    // 2. Если видео успело загрузиться, но админ нажал «Отмена» в форме
-    if (uploadedFileUrl) {
-      console.log('[CLEANUP] Удаляем несохраненный ролик из S3...');
-      try {
-        const delRes = await fetch('/api/admin/upload', {
-          method: 'DELETE',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ fileUrl: uploadedFileUrl }),
-        });
-        
-        if (delRes.ok) {
-          console.log('[CLEANUP SUCCESS] Файл успешно вычищен из хранилища Cloud.ru');
-        }
-      } catch (err) {
-        console.error('Не удалось очистить неиспользованный файл из S3:', err);
-      } finally {
-        setUploadedFileUrl(''); 
-      }
-    }
-
-    // 3. Вызываем вашу оригинальную функцию закрытия модалки
     if (typeof onCancel === 'function') {
       onCancel();
     }
@@ -473,35 +383,97 @@ function LessonForm({ lesson, onSave, onCancel }: any) {
     else setFreeQuestions(freeQuestions.filter((_, i) => i !== index));
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    let quiz_data = '';
-    if (showQuiz) {
-      if (quizType === 'options') {
-        const valid = questions.filter(q => q.question.trim());
-        if (valid.length > 0) quiz_data = JSON.stringify({ type: 'options', questions: valid });
-      } else {
-        const valid = freeQuestions.filter(q => q.question.trim());
-        if (valid.length > 0) quiz_data = JSON.stringify({ type: 'free_text', questions: valid });
+    setUploading(true);
+
+    let finalFileUrl = formData.content;
+
+    try {
+      // ТРАНЗАКЦИЯ: Загружаем файл в Cloud.ru S3 ТОЛЬКО в момент нажатия на кнопку "Сохранить"
+      if (localFile) {
+        console.log('=== [TRANSACTION_UPLOAD] Шаг 1 — Запрос подписанной ссылки ===');
+        const response = await fetch(`/api/admin/upload?fileName=${encodeURIComponent(localFile.name)}`, {
+          method: 'GET'
+        });
+        
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error || 'Не удалось сгенерировать пресайн-ссылку');
+
+        console.log('=== [TRANSACTION_UPLOAD] Шаг 2 — Прямая выгрузка в Object Storage Cloud.ru ===');
+        const xhr = new XMLHttpRequest();
+        const controller = new AbortController();
+        setAbortController(controller);
+
+        controller.signal.addEventListener('abort', () => xhr.abort());
+
+        xhr.upload.onprogress = (event) => {
+          if (event.lengthComputable) {
+            const percentComplete = ((event.loaded / event.total) * 100).toFixed(2);
+            setUploadProgress(percentComplete);
+            console.log(`[PROGRESSBAR] Загрузка медиа в облако: ${percentComplete}%`);
+          }
+        };
+
+        const uploadPromise = () => new Promise((resolve, reject) => {
+          xhr.open('PUT', data.uploadUrl, true);
+          xhr.setRequestHeader('Content-Type', localFile.type || 'video/mp4');
+
+          xhr.onload = () => (xhr.status >= 200 && xhr.status < 300 ? resolve(xhr.response) : reject(new Error(`S3 Error: ${xhr.status}`)));
+          xhr.onerror = () => reject(new Error('Сетевая ошибка при отправке в S3.'));
+          xhr.onabort = () => reject(new Error('AbortError'));
+          xhr.send(localFile);
+        });
+
+        await uploadPromise();
+        finalFileUrl = data.fileUrl; // Забираем наш новый рабочий относительный путь /api/videos/video_xxxx.mp4
+        console.log('=== [TRANSACTION_UPLOAD] Шаг 3 — Успешно доставлено в S3 ===', finalFileUrl);
       }
+
+      // Собираем квизы и домашние задания
+      let quiz_data = '';
+      if (showQuiz) {
+        if (quizType === 'options') {
+          const valid = questions.filter(q => q.question.trim());
+          if (valid.length > 0) quiz_data = JSON.stringify({ type: 'options', questions: valid });
+        } else {
+          const valid = freeQuestions.filter(q => q.question.trim());
+          if (valid.length > 0) quiz_data = JSON.stringify({ type: 'free_text', questions: valid });
+        }
+      }
+      const homework_data = showHomework ? homeworkText : '';
+
+      // Формируем payload с проверенным финальным URL видео
+      const savePayload: any = { ...formData, content: finalFileUrl, quiz_data, homework_data };
+
+      if (formData.type === 'case') {
+        // Если загружался файл для кейса, пушим его в массив картинок
+        savePayload.case_images = localFile ? [...caseImages, finalFileUrl] : caseImages;
+        savePayload.case_details = {
+          duration: duration.trim(),
+          resultText: resultText.trim(),
+          products: products.split(',').map(p => p.trim()).filter(Boolean)
+        };
+      }
+
+      console.log('=== [DATABASE_SAVE] Фиксация данных урока в PostgreSQL ===');
+      await onSave(savePayload);
+      
+      // Сброс локального состояния после успешного сохранения
+      setLocalFile(null);
+      setUploadProgress('0.00');
+
+    } catch (error: any) {
+      if (error.message === 'AbortError') {
+        alert('Загрузка была принудительно остановлена.');
+      } else {
+        console.error('[SUBMIT_CRITICAL_ERROR]', error);
+        alert(error.message || 'Критический сбой при сохранении урока');
+      }
+    } finally {
+      setUploading(false);
+      setAbortController(null);
     }
-    const homework_data = showHomework ? homeworkText : '';
-
-    // Создаем базовый объект для сохранения
-    const savePayload: any = { ...formData, quiz_data, homework_data };
-
-    // Если администратор создает или редактирует КЕЙС, добавляем новые поля
-    if (formData.type === 'case') {
-      savePayload.case_images = caseImages; // стейт с массивом картинок результатов
-      savePayload.case_details = {
-        duration: duration.trim(),
-        resultText: resultText.trim(),
-        products: products.split(',').map(p => p.trim()).filter(Boolean) // бьем строку БАДов в массив
-      };
-    }
-
-    // Вызываем вашу оригинальную функцию сохранения, но передаем расширенный savePayload
-    onSave(savePayload);
   };
 
   return (
@@ -701,7 +673,9 @@ function LessonForm({ lesson, onSave, onCancel }: any) {
 
           <div className="flex justify-end gap-3 pt-4 border-t-2">
             <button type="button" onClick={handleCancelUploadOrForm} className="px-4 py-2 text-gray-800 font-bold">Отмена</button>
-            <button type="submit" className="bg-blue-600 text-white px-6 py-2 rounded-lg font-bold">Сохранить</button>
+            <button type="submit" disabled={uploading} className="bg-blue-600 text-white px-6 py-2 rounded-lg font-bold disabled:bg-gray-400">
+  {uploading ? `Сохранение (${uploadProgress}%)` : 'Сохранить'}
+</button>
           </div>
         </form>
       </div>

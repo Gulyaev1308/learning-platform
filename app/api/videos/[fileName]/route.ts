@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { S3Client, GetObjectCommand } from '@aws-sdk/client-s3';
-import { Readable } from 'stream';
 
 const s3 = new S3Client({
   region: 'ru-central-1', 
@@ -15,19 +14,14 @@ const s3 = new S3Client({
 const BUCKET_NAME = 'mesa-edtech-media-bucket';
 
 export async function GET(request: NextRequest, { params }: { params: Promise<{ fileName: string }> }) {
-  // Точечно декодируем имя файла, чтобы исключить баги с %20, %7B и т.д.
-  const rawFileName = (await params).fileName;
-  const fileName = decodeURIComponent(rawFileName);
+  const { fileName } = await params;
+  const decodedKey = decodeURIComponent(fileName);
   
   try {
-    console.log(`[VIDEO_PROXY_START] Студент затребовал поток файла: "${fileName}"`);
-
     const rangeHeader = request.headers.get('range');
-
-    // 1. Формируем опции для запроса к Cloud.ru. Если есть Range, пробрасываем его прямо в S3!
     const s3Params: any = {
       Bucket: BUCKET_NAME,
-      Key: fileName,
+      Key: decodedKey,
     };
 
     if (rangeHeader) {
@@ -38,42 +32,39 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     const s3Response = await s3.send(command);
     
     if (!s3Response.Body) {
-      console.error(`[VIDEO_PROXY_ERROR] Тело ответа от Cloud.ru пущено для ключа: ${fileName}`);
       return NextResponse.json({ error: 'Файл пуст' }, { status: 404 });
     }
 
-    // Твой плеер требует правильные заголовки для перемотки
+    // Конвертируем Node-поток из AWS SDK в Web ReadableStream для NextResponse (Фикс ошибки 500)
+    const nodeStream = s3Response.Body as any;
+    const webStream = new ReadableStream({
+      start(controller) {
+        nodeStream.on('data', (chunk: any) => controller.enqueue(chunk));
+        nodeStream.on('end', () => controller.close());
+        nodeStream.on('error', (err: any) => controller.error(err));
+      },
+      cancel() {
+        if (nodeStream.destroy) nodeStream.destroy();
+      }
+    });
+
     const responseHeaders = new Headers();
     responseHeaders.set('Content-Type', s3Response.ContentType || 'video/mp4');
     responseHeaders.set('Accept-Ranges', 'bytes');
     
-    if (s3Response.ContentRange) {
-      responseHeaders.set('Content-Range', s3Response.ContentRange);
-    }
-    if (s3Response.ContentLength) {
-      responseHeaders.set('Content-Length', s3Response.ContentLength.toString());
-    }
+    if (s3Response.ContentRange) responseHeaders.set('Content-Range', s3Response.ContentRange);
+    if (s3Response.ContentLength) responseHeaders.set('Content-Length', s3Response.ContentLength.toString());
 
-    // Переводим веб-стрим в нативный читаемый поток Next.js без забивания RAM буферами
-    const stream = s3Response.Body as Readable;
-
-    console.log(`[VIDEO_PROXY_STREAM_OK] Стриминг файла ${fileName} успешно инициирован. Range: ${rangeHeader || 'нет'}`);
-    
-    return new NextResponse(stream as any, {
+    return new NextResponse(webStream, {
       status: rangeHeader ? 206 : 200,
       headers: responseHeaders,
     });
 
   } catch (error: any) {
-    if (error.name === 'NoSuchKey' || error.code === 'NoSuchKey') {
-      console.error(`[VIDEO_PROXY_404] Файл "${fileName}" физически отсутствует в бакете Cloud.ru!`);
-      return NextResponse.json({ 
-        error: 'Видеофайл не найден в облаке', 
-        hint: 'Убедитесь, что имя файла в БД совпадает с именем в Object Storage' 
-      }, { status: 404 });
+    console.error(`[VIDEO_PROXY_ERROR] Ошибка стриминга ${decodedKey}:`, error.message);
+    if (error.name === 'NoSuchKey') {
+      return NextResponse.json({ error: 'Файл отсутствует в S3' }, { status: 404 });
     }
-
-    console.error(`[VIDEO_PROXY_CRITICAL] Критический сбой прокси для файла ${fileName}:`, error.message);
-    return NextResponse.json({ error: 'Ошибка сервера при стриминге из S3' }, { status: 500 });
+    return NextResponse.json({ error: 'Ошибка чтения из облака' }, { status: 500 });
   }
 }
