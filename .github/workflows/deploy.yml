@@ -25,7 +25,7 @@ jobs:
           # 2. Полностью и принудительно очищаем всё содержимое папки
           sudo rm -rf ./* ./.* 2>/dev/null || true
           
-          # 3. Хитрый обход бага парсера: собираем URL из частей через переменные
+          # 3. Обход бага парсера: собираем URL из частей через переменные
           DOMAIN="github.com"
           REPO_PATH="Gulyaev1308/learning-platform.git"
           FULL_URL="https://${DOMAIN}/${REPO_PATH}"
@@ -33,14 +33,14 @@ jobs:
           # Клонируем проект по склеенной ссылке
           git clone "$FULL_URL" .
           
-          # 4. Создаем файл конфигурации .env на сервере (ИСПРАВЛЕНО: везде >>)
+          # 4. Создаем файл конфигурации .env на сервере
           echo "DB_USER=learning_admin" > .env
           echo "DB_NAME=learning_platform_db" >> .env
           echo "DB_PASSWORD=${{ secrets.PRODUCTION_DB_PASSWORD }}" >> .env
           echo "SESSION_SECRET=${{ secrets.PRODUCTION_SESSION_SECRET }}" >> .env
 
-          # Создаем файлы окружения приложения
-          echo "DATABASE_URL=postgresql://learning_admin:${{ secrets.PRODUCTION_DB_PASSWORD }}@postgres-db:5432/learning_platform_db?schema=public" > .env.production
+          # ИСПРАВЛЕНО: Хост базы данных изменен с postgres-db на реальный learning-postgres
+          echo "DATABASE_URL=postgresql://learning_admin:${{ secrets.PRODUCTION_DB_PASSWORD }}@learning_postgres:5432/learning_platform_db?schema=public" > .env.production
           echo "SESSION_SECRET=${{ secrets.PRODUCTION_SESSION_SECRET }}" >> .env.production
 
           echo "S3_ACCESS_KEY=${{ secrets.S3_ACCESS_KEY }}" >> .env
@@ -48,5 +48,9 @@ jobs:
           echo "S3_BUCKET_NAME=${{ secrets.S3_BUCKET_NAME }}" >> .env
           echo "S3_ENDPOINT=https://s3.cloud.ru" >> .env
           
-          # 5. Пересобираем и запускаем Docker-контейнеры приложения и Postgres
+          # 5. Пересобираем и запускаем Docker-контейнеры
+          console.log("[DEPLOY_LOG] Запуск сборки и поднятия контейнеров через docker-compose...")
           sudo docker compose up -d --build
+
+          # DevOps-чистка: удаляем старые dangling-образы, чтобы не забивать диск сервера Cloud.ru
+          sudo docker image prune -f
