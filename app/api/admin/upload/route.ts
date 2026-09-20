@@ -7,12 +7,9 @@ import { getSession } from '@/lib/auth';
 // НАСТРОЙКА ПО СТАНДАРТУ CLOUD.RU EVOLUTION
 const s3 = new S3Client({
   region: 'ru-central-1',
-  // Базовый S3 эндпоинт Cloud.ru Evolution
-  endpoint: 'https://s3.ru-central-1.cac.cloud.ru', 
-  // Отключаем bucketEndpoint, чтобы SDK сам корректно конструировал путь
+  // Меням внутренний адрес на публичный, доступный из браузеров пользователей
+  endpoint: 'https://cloud.ru', 
   bucketEndpoint: false, 
-  // forcePathStyle: true заставляет использовать формат ссылки endpoint/bucket_name/file_name,
-  // что гарантирует совместимость с любыми S3-совместимыми хранилищами в РФ
   forcePathStyle: true,
   credentials: {
     accessKeyId: process.env.S3_ACCESS_KEY || '',
