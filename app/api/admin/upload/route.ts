@@ -4,11 +4,14 @@ import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import path from 'path';
 import { getSession } from '@/lib/auth';
 
+// НАСТРОЙКА ПО СТАНДАРТУ CLOUD.RU EVOLUTION
 const s3 = new S3Client({
   region: 'ru-central-1',
-  endpoint: 'https://s3.cloud.ru',
-  // ВОЗВРАЩЕНО В РАБОЧЕЕ СОСТОЯНИЕ: форсируем путь, чтобы домен s3.cloud.ru оставался целым
-  forcePathStyle: true,
+  // Указываем точный виртуальный поддомен бакета, как требует шлюз Сбера
+  endpoint: 'https://cloud.ru',
+  // КРИТИЧЕСКИ ВАЖНО ДЛЯ СТАНДАРТА: Сообщаем SDK, что эндпоинт уже содержит имя бакета
+  bucketEndpoint: true, 
+  forcePathStyle: false,
   credentials: {
     accessKeyId: process.env.S3_ACCESS_KEY || '',
     secretAccessKey: process.env.S3_SECRET_KEY || '',
@@ -33,7 +36,7 @@ export async function GET(request: NextRequest) {
     const ext = path.extname(fileName).toLowerCase() || '.mp4';
     const uniqueFileName = `video_${Date.now()}${ext}`;
 
-    console.log(`[S3_UPLOAD_LOG] Генерация ссылки для файла: ${fileName} -> Сгенерированное имя в S3: ${uniqueFileName}`);
+    console.log(`[S3_UPLOAD_LOG] Стандартная генерация ссылки. Файл: ${uniqueFileName}`);
 
     const command = new PutObjectCommand({
       Bucket: BUCKET_NAME,
@@ -41,18 +44,11 @@ export async function GET(request: NextRequest) {
       ContentType: fileTypeByExt(ext),
     });
 
-    // ЖЕЛЕЗНЫЙ ХАК ДЛЯ СТАРОЙ ВЕРСИИ SDK И CLOUD.RU:
-    // Удаляем внутреннее свойство middleware, которое принудительно рассчитывает чек-суммы CRC32
-    if (command.middlewareStack && typeof command.middlewareStack.remove === 'function') {
-      command.middlewareStack.remove('addChecksumMiddleware');
-      command.middlewareStack.remove('addHashesMiddleware');
-    }
-
-    // Генерация чистой пресайн-ссылки на загрузку
+    // Генерируем чистую ссылку — теперь она будет строго формата: https://cloud.ru/video_xxxx.mp4
     const uploadUrl = await getSignedUrl(s3, command, { expiresIn: 3600 });
     const fileViewUrl = `/api/videos/${uniqueFileName}`;
 
-    console.log(`[S3_UPLOAD_SUCCESS] Ссылки успешно созданы. fileUrl для БД: ${fileViewUrl}`);
+    console.log(`[S3_UPLOAD_SUCCESS] Ссылка по стандарту Cloud.ru создана: ${fileViewUrl}`);
 
     return NextResponse.json({ uploadUrl, fileUrl: fileViewUrl });
   } catch (error: any) {
@@ -78,7 +74,7 @@ export async function DELETE(request: NextRequest) {
 
     const key = fileUrl.split('/').pop();
 
-    if (!key || key === 'videos' || key === 'cloud.ru{uniqueFileName}') {
+    if (!key || key === 'videos') {
       throw new Error(`Некорректный ключ файла для удаления из S3: ${key}`);
     }
 
