@@ -7,10 +7,14 @@ import { getSession } from '@/lib/auth';
 // НАСТРОЙКА ПО СТАНДАРТУ CLOUD.RU EVOLUTION
 const s3 = new S3Client({
   region: 'ru-central-1',
-  // Меням внутренний адрес на публичный, доступный из браузеров пользователей
   endpoint: 'https://s3.cloud.ru', 
   bucketEndpoint: false, 
   forcePathStyle: true,
+  // ХАК ДЛЯ AWS SDK: Переопределяем встроенный провайдер эндпоинтов, 
+  // чтобы он принудительно возвращал ровно то, что мы указали в endpoint
+  endpointProvider: () => ({
+    url: new URL('https://s3.cloud.ru'),
+  }),
   credentials: {
     accessKeyId: process.env.S3_ACCESS_KEY || '',
     secretAccessKey: process.env.S3_SECRET_KEY || '',
