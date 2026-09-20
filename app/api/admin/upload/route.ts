@@ -6,13 +6,9 @@ import { getSession } from '@/lib/auth';
 
 const s3 = new S3Client({
   region: 'ru-central-1',
-  endpoint: 'https://cloud.ru',
-  // ИСПРАВЛЕНО ДЛЯ CLOUD.RU EVOLUTION: Отключаем forcePathStyle,
-  // чтобы подписанные ссылки генерировались в правильном формате bucket.s3.cloud.ru
-  forcePathStyle: false,
-  // ИСПРАВЛЕНО ДЛЯ TYPESCRIPT: Отключаем валидацию чек-сумм на уровне клиента,
-  // чтобы заголовки CRC32 не ломали preflight-запросы (CORS) в Cloud.ru
-  responseChecksumValidation: 'WHEN_REQUIRED',
+  endpoint: 'https://s3.cloud.ru',
+  // ВОЗВРАЩЕНО В РАБОЧЕЕ СОСТОЯНИЕ: форсируем путь, чтобы домен s3.cloud.ru оставался целым
+  forcePathStyle: true,
   credentials: {
     accessKeyId: process.env.S3_ACCESS_KEY || '',
     secretAccessKey: process.env.S3_SECRET_KEY || '',
@@ -39,14 +35,20 @@ export async function GET(request: NextRequest) {
 
     console.log(`[S3_UPLOAD_LOG] Генерация ссылки для файла: ${fileName} -> Сгенерированное имя в S3: ${uniqueFileName}`);
 
-    // ИСПРАВЛЕНО: Убрано свойство из команды во избежание ошибки перегрузки типов.
-    // Глобальное управление перенесено в конструктор S3Client выше
     const command = new PutObjectCommand({
       Bucket: BUCKET_NAME,
       Key: uniqueFileName,
       ContentType: fileTypeByExt(ext),
     });
 
+    // ЖЕЛЕЗНЫЙ ХАК ДЛЯ СТАРОЙ ВЕРСИИ SDK И CLOUD.RU:
+    // Удаляем внутреннее свойство middleware, которое принудительно рассчитывает чек-суммы CRC32
+    if (command.middlewareStack && typeof command.middlewareStack.remove === 'function') {
+      command.middlewareStack.remove('addChecksumMiddleware');
+      command.middlewareStack.remove('addHashesMiddleware');
+    }
+
+    // Генерация чистой пресайн-ссылки на загрузку
     const uploadUrl = await getSignedUrl(s3, command, { expiresIn: 3600 });
     const fileViewUrl = `/api/videos/${uniqueFileName}`;
 
