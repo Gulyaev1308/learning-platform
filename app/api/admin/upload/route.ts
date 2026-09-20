@@ -7,11 +7,13 @@ import { getSession } from '@/lib/auth';
 // НАСТРОЙКА ПО СТАНДАРТУ CLOUD.RU EVOLUTION
 const s3 = new S3Client({
   region: 'ru-central-1',
-  // Указываем точный виртуальный поддомен бакета, как требует шлюз Сбера
-  endpoint: 'https://cloud.ru',
-  // КРИТИЧЕСКИ ВАЖНО ДЛЯ СТАНДАРТА: Сообщаем SDK, что эндпоинт уже содержит имя бакета
-  bucketEndpoint: true, 
-  forcePathStyle: false,
+  // Базовый S3 эндпоинт Cloud.ru Evolution
+  endpoint: 'https://s3.ru-central-1.cac.cloud.ru', 
+  // Отключаем bucketEndpoint, чтобы SDK сам корректно конструировал путь
+  bucketEndpoint: false, 
+  // forcePathStyle: true заставляет использовать формат ссылки endpoint/bucket_name/file_name,
+  // что гарантирует совместимость с любыми S3-совместимыми хранилищами в РФ
+  forcePathStyle: true,
   credentials: {
     accessKeyId: process.env.S3_ACCESS_KEY || '',
     secretAccessKey: process.env.S3_SECRET_KEY || '',
