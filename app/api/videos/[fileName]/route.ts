@@ -2,12 +2,12 @@ import { NextRequest, NextResponse } from 'next/server';
 import { S3Client, GetObjectCommand } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 
+// Синхронизируем конфигурацию со стандартом Cloud.ru Evolution
 const s3 = new S3Client({
   region: 'ru-central-1', 
-  // ИСПРАВЛЕНО ДЛЯ CLOUD.RU: убираем принудительный forcePathStyle,
-  // чтобы ссылки генерировались в формате bucket.s3.cloud.ru
   endpoint: 'https://s3.cloud.ru', 
-  forcePathStyle: false, 
+  bucketEndpoint: false,
+  forcePathStyle: true, // Включаем Path Style формат ссылок
   credentials: {
     accessKeyId: process.env.S3_ACCESS_KEY || '',
     secretAccessKey: process.env.S3_SECRET_KEY || '',
@@ -29,9 +29,14 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     });
 
     // Генерируем временную подписанную ссылку на 1 час
-    const signedUrl = await getSignedUrl(s3, command, { expiresIn: 3600 });
+    let signedUrl = await getSignedUrl(s3, command, { expiresIn: 3600 });
 
-    console.log(`[VIDEO_REDIRECT_SUCCESS] Ссылка успешно создана: ${signedUrl}. Выполняем редирект.`);
+    // ИСПРАВЛЕНИЕ: Предотвращаем баг удаления поддомена s3 со стороны AWS SDK
+    if (signedUrl.startsWith('https://cloud.ru')) {
+      signedUrl = signedUrl.replace('https://cloud.ru', 'https://s3.cloud.ru');
+    }
+
+    console.log(`[VIDEO_REDIRECT_SUCCESS] Исправленная ссылка успешно создана: ${signedUrl}. Выполняем редирект.`);
 
     return NextResponse.redirect(signedUrl, { status: 302 });
 
