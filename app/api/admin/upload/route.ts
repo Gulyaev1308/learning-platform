@@ -5,11 +5,14 @@ import path from 'path';
 import { getSession } from '@/lib/auth';
 
 const s3 = new S3Client({
-  region: 'ru-central-1', 
-  endpoint: 'https://s3.cloud.ru', 
+  region: 'ru-central-1',
+  endpoint: 'https://cloud.ru',
   // ИСПРАВЛЕНО ДЛЯ CLOUD.RU EVOLUTION: Отключаем forcePathStyle,
   // чтобы подписанные ссылки генерировались в правильном формате bucket.s3.cloud.ru
-  forcePathStyle: false, 
+  forcePathStyle: false,
+  // ИСПРАВЛЕНО ДЛЯ TYPESCRIPT: Отключаем валидацию чек-сумм на уровне клиента,
+  // чтобы заголовки CRC32 не ломали preflight-запросы (CORS) в Cloud.ru
+  responseChecksumValidation: 'WHEN_REQUIRED',
   credentials: {
     accessKeyId: process.env.S3_ACCESS_KEY || '',
     secretAccessKey: process.env.S3_SECRET_KEY || '',
@@ -36,6 +39,8 @@ export async function GET(request: NextRequest) {
 
     console.log(`[S3_UPLOAD_LOG] Генерация ссылки для файла: ${fileName} -> Сгенерированное имя в S3: ${uniqueFileName}`);
 
+    // ИСПРАВЛЕНО: Убрано свойство из команды во избежание ошибки перегрузки типов.
+    // Глобальное управление перенесено в конструктор S3Client выше
     const command = new PutObjectCommand({
       Bucket: BUCKET_NAME,
       Key: uniqueFileName,
@@ -76,9 +81,9 @@ export async function DELETE(request: NextRequest) {
     }
 
     const { DeleteObjectCommand } = await import('@aws-sdk/client-s3');
-    
+
     console.log(`[S3_CLEANUP_ACTION] Отправка команды удаления в Cloud.ru S3 для Key: ${key}`);
-    
+
     await s3.send(new DeleteObjectCommand({
       Bucket: BUCKET_NAME,
       Key: key,
