@@ -67,6 +67,26 @@ export default function AdminPage() {
     refresh();
   };
 
+  const handleDeleteLeader = async (leaderId: number) => {
+    if (!confirm("🚨 ВНИМАНИЕ! Это полностью удалит Лидера, ВСЕХ его студентов, их прогресс, анкеты и ВСЕ созданные им курсы каскадно! Данные невозможно будет восстановить. Удалить?")) return;
+    try {
+      const res = await fetch(`/api/admin/leaders?id=${leaderId}`, { method: "DELETE" });
+      if (res.ok) {
+        alert("Лидер и вся его структура успешно удалены");
+        if (selectedLeader?.id === leaderId) {
+          setSelectedLeader(null);
+          setStructure([]);
+        }
+        window.location.reload();
+      } else {
+        const data = await res.json();
+        alert(data.error || "Ошибка при удалении");
+      }
+    } catch (err) {
+      alert("Ошибка сети при удалении лидера");
+    }
+  };
+
   const handleSaveModule = async (data: any) => {
     if (!currentBlockId) return;
     const url = data.id ? `/api/admin/modules/${data.id}` : `/api/admin/blocks/${currentBlockId}/modules`;
@@ -125,11 +145,13 @@ export default function AdminPage() {
             <h2 className="font-bold text-gray-900 mb-3">Лидеры</h2>
             <div className="space-y-2 max-h-[600px] overflow-y-auto">
               {leaders.map(leader => (
-                <button key={leader.id} onClick={() => handleSelectLeader(leader)}
-                  className={`w-full text-left p-3 rounded-lg border-2 ${selectedLeader?.id === leader.id ? 'border-blue-600 bg-blue-50' : 'border-gray-300 bg-white'}`}>
-                  <div className="font-bold text-gray-900 text-sm">{leader.name}</div>
-                  <div className="text-xs text-gray-700">{leader.email}</div>
-                </button>
+                <div key={leader.id} className={`flex items-center gap-2 p-2 rounded-lg border-2 ${selectedLeader?.id === leader.id ? "border-blue-600 bg-blue-50" : "border-gray-300 bg-white"}`}>
+                  <button onClick={() => handleSelectLeader(leader)} className="flex-1 text-left focus:outline-none">
+                    <div className="font-bold text-gray-900 text-sm">{leader.name}</div>
+                    <div className="text-xs text-gray-700">{leader.email}</div>
+                  </button>
+                  <button onClick={() => handleDeleteLeader(leader.id)} className="text-red-600 hover:text-red-800 text-sm p-1.5 transition active:scale-90" title="Удалить лидера и все его курсы">🗑</button>
+                </div>
               ))}
             </div>
           </div>

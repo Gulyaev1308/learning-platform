@@ -33,7 +33,7 @@ export async function DELETE(request: NextRequest) {
       return NextResponse.json({ error: 'ID лидера не указан' }, { status: 400 });
     }
 
-    // Начинаем транзакцию, чтобы удаление было атомарным и безопасным
+    // Начинаем транзакцию, чтобы удаление всей структуры было атомарным и безопасным
     await db.query('BEGIN');
 
     // 1. Находим ID всех студентов, привязанных к этому лидеру
@@ -49,14 +49,32 @@ export async function DELETE(request: NextRequest) {
       await db.query('DELETE FROM users WHERE id = ANY($1::integer[])', [studentIds]);
     }
 
-    // 4. Удаляем личные записи лидера (его аппрувы или данные, если есть)
+    // 4. ДОБАВЛЕНО: Полное каскадное удаление всей структуры обучения (курсов) лидера
+    const blocksRes = await db.query('SELECT id FROM blocks WHERE leader_id = $1', [leaderId]);
+    const blockIds = blocksRes.rows.map(r => r.id);
+
+    if (blockIds.length > 0) {
+      const modulesRes = await db.query('SELECT id FROM modules WHERE block_id = ANY($1::integer[])', [blockIds]);
+      const moduleIds = modulesRes.rows.map(r => r.id);
+
+      if (moduleIds.length > 0) {
+        // Удаляем уроки
+        await db.query('DELETE FROM lessons WHERE module_id = ANY($1::integer[])', [moduleIds]);
+        // Удаляем модули
+        await db.query('DELETE FROM modules WHERE id = ANY($1::integer[])', [moduleIds]);
+      }
+      // Удаляем блоки
+      await db.query('DELETE FROM blocks WHERE id = ANY($1::integer[])', [blockIds]);
+    }
+
+    // 5. Удаляем личные записи лидера (его аппрувы или данные, если есть)
     await db.query('DELETE FROM premium_access WHERE approved_by = $1', [leaderId]);
 
-    // 5. Удаляем самого лидера
+    // 6. Удаляем самого лидера
     await db.query('DELETE FROM users WHERE id = $1 AND role = $2', [leaderId, 'leader']);
 
     await db.query('COMMIT');
-    return NextResponse.json({ success: true, message: 'Лидер и вся его структура успешно удалены' });
+    return NextResponse.json({ success: true, message: 'Лидер и вся его структура обучения успешно удалены' });
   } catch (error) {
     await db.query('ROLLBACK');
     console.error('Error deleting leader structure:', error);
