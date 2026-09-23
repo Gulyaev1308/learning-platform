@@ -197,7 +197,7 @@ export default function AdminPage() {
       }} onCancel={() => setShowLeaderForm(false)} />}
 
       {showBlockForm && selectedLeader && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
+        <div key={editingBlock?.id || 'new'} className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-xl p-6 max-w-md w-full shadow-xl space-y-4">
             <h3 className="text-lg font-bold text-gray-900">{editingBlock ? 'Редактировать блок' : 'Создать блок'}</h3>
             <div className="space-y-3">
