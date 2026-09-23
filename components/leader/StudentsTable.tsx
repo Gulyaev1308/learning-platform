@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useRouter } from 'next/navigation';
 
 interface Student {
   id: number;
@@ -19,6 +20,7 @@ interface StudentsTableProps {
 }
 
 export default function StudentsTable({ students, onViewAnswers }: StudentsTableProps) {
+  const router = useRouter();
   const [selectedStudent, setSelectedStudent] = useState<Student | null>(null);
   const [verifying, setVerifying] = useState(false);
 
@@ -41,7 +43,7 @@ export default function StudentsTable({ students, onViewAnswers }: StudentsTable
       if (res.ok) {
         alert(action === 'approved' ? `Доступ к объекту "${blockTitle || ''}" открыт!` : 'Доступ ограничен');
         setSelectedStudent(null);
-        window.location.reload();
+        router.refresh(); // Исправлено: корректное обновление данных в Next.js без поломки кэша
       } else {
         const data = await res.json();
         alert(data.error || 'Ошибка изменения доступа');
