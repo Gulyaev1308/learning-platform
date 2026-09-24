@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 
 interface CaseLessonProps {
   lesson: {
@@ -24,9 +24,24 @@ export function CaseLesson({ lesson, onComplete, isCompleted }: CaseLessonProps)
   const products = details.products || [];
   
   const [activeImageIndex, setActiveImageIndex] = useState(0);
+  const mediaContainerRef = useRef<HTMLDivElement>(null);
 
-  // Функция для проверки, является ли файл видеороликом
   const isVideo = (url: string) => /\.(mp4|webm|ogg)\$/i.test(url) || url.includes('/api/videos/');
+
+  // Функция для открытия текущего медиафайла на весь экран
+  const handleFullScreen = () => {
+    if (mediaContainerRef.current) {
+      if (mediaContainerRef.current.requestFullscreen) {
+        mediaContainerRef.current.requestFullscreen();
+      } else if ((mediaContainerRef.current as any).mozRequestFullScreen) { /* Firefox */
+        (mediaContainerRef.current as any).mozRequestFullScreen();
+      } else if ((mediaContainerRef.current as any).webkitRequestFullscreen) { /* Chrome, Safari & Opera */
+        (mediaContainerRef.current as any).webkitRequestFullscreen();
+      } else if ((mediaContainerRef.current as any).msRequestFullscreen) { /* IE/Edge */
+        (mediaContainerRef.current as any).msRequestFullscreen();
+      }
+    }
+  };
 
   return (
     <div className="w-full max-w-4xl mx-auto p-4 md:p-6 bg-white dark:bg-slate-900 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-800">
@@ -41,14 +56,18 @@ export function CaseLesson({ lesson, onComplete, isCompleted }: CaseLessonProps)
 
       {images.length > 0 && (
         <div className="mb-8">
-          <div className="relative w-full h-[350px] md:h-[450px] rounded-xl overflow-hidden bg-slate-50 dark:bg-slate-800/50 flex items-center justify-center border border-slate-200 dark:border-slate-700">
+          {/* Контейнер медиа с рефом для полноэкранного режима */}
+          <div 
+            ref={mediaContainerRef}
+            className="relative w-full h-[350px] md:h-[450px] rounded-xl overflow-hidden bg-slate-50 dark:bg-slate-800/50 flex items-center justify-center border border-slate-200 dark:border-slate-700"
+          >
             {isVideo(images[activeImageIndex]) ? (
-              // Полноценный плеер с элементами управления, отключенным скачиванием и корректным оверлеем
+              // Полноценный видеоплеер с возможностью ставить на паузу, перематывать и разворачивать
               <video 
                 key={images[activeImageIndex]}
                 src={images[activeImageIndex]} 
                 controls 
-                controlsList="nodownload"
+                preload="metadata"
                 className="w-full h-full object-contain bg-black" 
               />
             ) : (
@@ -64,6 +83,15 @@ export function CaseLesson({ lesson, onComplete, isCompleted }: CaseLessonProps)
                 {activeImageIndex === 0 ? 'ФОТО: ДО' : 'ФОТО: ПОСЛЕ'}
               </span>
             )}
+
+            {/* Кнопка для вызова полноэкранного режима просмотра */}
+            <button 
+              onClick={handleFullScreen}
+              className="absolute bottom-4 right-4 bg-black/70 hover:bg-black/90 text-white p-2 rounded-lg text-xs font-semibold transition"
+              title="Открыть на весь экран"
+            >
+              🖥️ На весь экран
+            </button>
           </div>
 
           {images.length > 1 && (
@@ -77,7 +105,6 @@ export function CaseLesson({ lesson, onComplete, isCompleted }: CaseLessonProps)
                   }`}
                 >
                   {isVideo(img) ? (
-                    // ИСПРАВЛЕНО: Вместо битой картинки для видео-миниатюры показываем заглушку с иконкой плеера
                     <div className="w-full h-full bg-slate-800 flex flex-col items-center justify-center text-white text-[10px] p-1 font-bold">
                       <span>▶ ВИДЕО</span>
                     </div>
@@ -116,7 +143,6 @@ export function CaseLesson({ lesson, onComplete, isCompleted }: CaseLessonProps)
 
         <div className="md:col-span-2 space-y-4">
           <div className="prose dark:prose-invert max-w-none">
-            {/* ИСПРАВЛЕНО: Название блока теперь строго соответствует административной панели */}
             <h3 className="text-lg font-bold text-slate-800 dark:text-slate-200 mb-2">Полная история и разбор кейса (основной текст):</h3>
             <p className="text-slate-600 dark:text-slate-300 whitespace-pre-line leading-relaxed text-sm">
               {lesson.content}

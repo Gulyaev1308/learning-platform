@@ -169,12 +169,13 @@ export default function LessonPage() {
           </div>
         )}
 
-        {/* ОСНОВНОЙ КОНТЕНТ УРОКА (ЕСЛИ ЗАПОЛНЕН) */}
-        {lesson.content && lesson.content.trim() !== '' && !hasVideo && (
-          <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-sm">
+        {lesson.type !== 'case' && (
+          <>
             <h2 className="text-base font-bold text-gray-900 mb-2">Материал урока:</h2>
-            <div className="text-sm text-gray-800 leading-relaxed whitespace-pre-wrap font-medium">{lesson.content}</div>
-          </div>
+            <p className="text-slate-600 dark:text-slate-300 whitespace-pre-line leading-relaxed text-sm">
+              {lesson.content}
+            </p>
+          </>
         )}
 
         {lesson.description && (
