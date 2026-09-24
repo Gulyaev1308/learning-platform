@@ -18,7 +18,7 @@ export async function POST(request: NextRequest) {
       description, 
       quiz_data, 
       module_id, 
-      order_index,
+      // ИСПРАВЛЕНО: order_index больше не принимаем с фронтенда, рассчитываем сами
       case_images, 
       case_details 
     } = body;
@@ -29,13 +29,20 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Не указан ID модуля' }, { status: 400 });
     }
 
+    // ИСПРАВЛЕНО: Автоматический расчет следующего порядка урока внутри конкретного модуля
+    const maxOrderResult = await db.query(
+      'SELECT COALESCE(MAX(order_index), 0) as max_order FROM lessons WHERE module_id = \$1',
+      [module_id]
+    );
+    const nextOrder = maxOrderResult.rows[0].max_order + 1;
+
     // Обработка данных квиза
     const dbQuizData = typeof quiz_data === 'object' ? JSON.stringify(quiz_data) : (quiz_data || '[]');
 
     // Точечный фикс: обходим ограничение базы данных, сохраняя кейс как тип text
     const dbType = type === 'case' ? 'text' : type;
 
-    // ИСПРАВЛЕНО ТОЧЕЧНО: Строго приводим case_images к JSON-строке для корректной записи в поле типа JSONB
+    // Строго приводим case_images к JSON-строке для корректной записи в поле типа JSONB
     const dbCaseImages = type === 'case' && Array.isArray(case_images) 
       ? JSON.stringify(case_images) 
       : '[]';
@@ -44,7 +51,7 @@ export async function POST(request: NextRequest) {
       ? JSON.stringify(case_details) 
       : '{}';
 
-    console.log(`[LESSON_CREATE_DB] Запись в PostgreSQL. Путь контента: "${content || ''}"`);
+    console.log(`[LESSON_CREATE_DB] Запись в PostgreSQL. Путь контента: "${content || ''}". Порядок: ${nextOrder}`);
 
     const result = await db.query(
       `INSERT INTO lessons (
@@ -58,9 +65,9 @@ export async function POST(request: NextRequest) {
         description || '', 
         dbQuizData, 
         module_id, 
-        order_index || 1,
-        dbCaseImages,      // Теперь передается как валидная JSON-строка в JSONB-колонку
-        dbCaseDetails      // Передается как валидная JSON-строка в JSONB-колонку
+        nextOrder, // ИСПРАВЛЕНО: Передаем автоматически вычисленный порядковый номер
+        dbCaseImages,      
+        dbCaseDetails      
       ]
     );
 
@@ -68,7 +75,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ success: true, lessonId: result.rows[0].id });
 
   } catch (error: any) {
-    console.error('[API_ERROR] [POST /api/admin/lessons] Критическая ошибка создания урока:', error.message, error.stack);
-    return NextResponse.json({ error: 'Ошибка сервера при сохранении в базу данных' }, { status: 500 });
+    console.error('❌ Ошибка создания урока:', error);
+    return NextResponse.json({ error: 'Внутренняя ошибка сервера' }, { status: 500 });
   }
 }

@@ -471,6 +471,11 @@ function LessonForm({ lesson, onSave, onCancel }: any) {
       // Формируем базовый объект для сохранения
       const savePayload: any = { ...formData, quiz_data, homework_data };
 
+      // ИСПРАВЛЕНО: Если это создание нового урока, удаляем order_index, чтобы бэкенд рассчитал его автоматически
+      if (!formData.id) {
+        delete savePayload.order_index;
+      }
+
       // СТРОГОЕ РАЗДЕЛЕНИЕ ТИПОВ УРОКОВ (Точечный фикс)
       if (formData.type === 'case') {
         // 1. Если это КЕЙС, то загруженный файл — это картинка результата. Пушим её в массив картинок.
