@@ -333,36 +333,31 @@ function LessonForm({ lesson, onSave, onCancel }: any) {
   const [resultText, setResultText] = useState('');
 
   useEffect(() => {
-    if (lesson?.quiz_data) {
-      try {
-        const quiz = JSON.parse(lesson.quiz_data);
-        if (quiz.type === 'free_text') {
-          setQuizType('free_text');
-          setFreeQuestions(quiz.questions || [{ question: '' }]);
-        } else {
-          setQuizType('options');
-          setQuestions(quiz.questions || [{ question: '', options: ['', '', '', ''] }]);
-        }
-        setShowQuiz(true);
-      } catch {}
-    }
-    if (lesson?.homework_data) {
-      setHomeworkText(lesson.homework_data);
-      setShowHomework(true);
-    }
-    if (lesson?.type === 'case') {
-      setCaseImages(Array.isArray(lesson.case_images) ? lesson.case_images : []);
-      const details = typeof lesson.case_details === 'string' 
+    if (formData.type === 'case') {
+      // Если у редактируемого урока изначально были картинки кейса — восстанавливаем их, иначе ставим пустой массив
+      setCaseImages(Array.isArray(lesson?.case_images) ? lesson.case_images : []);
+      
+      const details = typeof lesson?.case_details === 'string' 
         ? JSON.parse(lesson.case_details || '{}') 
-        : (lesson.case_details || {});
+        : (lesson?.case_details || {});
+        
       setDuration(details.duration || '');
       setResultText(details.resultText || '');
       setProducts(details.products ? details.products.join(', ') : '');
     } else {
-      // Очищаем поля кейса, если открыли обычный урок, чтобы данные не смешивались
+      // Очищаем поля кейса при переключении на другие типы
       setCaseImages([]); setDuration(''); setProducts(''); setResultText('');
     }
-  }, [lesson]);
+
+    // ТРАНЗАКЦИОННЫЙ СБРОС: Сбрасываем старый бинарный поток, чтобы исключить ошибку S3 500
+    setLocalFile(null);
+    setUploadProgress('0.00');
+    if (abortController) {
+      abortController.abort();
+      setAbortController(null);
+    }
+    console.log(`[FORM_TRANSITION] Тип урока переключен на \${formData.type}. Стейты синхронизированы.`);
+  }, [formData.type, lesson]);
 
   const [abortController, setAbortController] = useState<AbortController | null>(null);
   const [uploadedFileUrl, setUploadedFileUrl] = useState<string>('');
