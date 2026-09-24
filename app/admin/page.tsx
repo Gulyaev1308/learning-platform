@@ -463,30 +463,36 @@ function LessonForm({ lesson, onSave, onCancel }: any) {
       // Логируем финальное состояние перед сборкой payload для PostgreSQL
       console.log(`[SUBMIT_TRANS_LOG] Сборка payload. Тип урока: ${formData.type}, Итоговый URL файла: ${finalFileUrl}`);
 
+      // Формируем базовый объект для сохранения
       const savePayload: any = { ...formData, quiz_data, homework_data };
 
       if (!formData.id) {
         delete savePayload.order_index;
       }
 
-      // СТРОГОЕ РАЗДЕЛЕНИЕ ТИПОВ УРОКОВ (ИСПРАВЛЕНО ДЛЯ КЕЙСОВ С НУЛЯ)
+      // СТРОГОЕ РАЗДЕЛЕНИЕ ТИПОВ УРОКОВ (ИСПРАВЛЕНО ИБЕЗОПАСЕНО)
       if (formData.type === 'case') {
-        // Безопасно собираем массив картинок/видео, исключая undefined и null при создании с нуля
-        const currentImages = Array.isArray(caseImages) 
+        const safeCaseImages = Array.isArray(caseImages) 
           ? caseImages 
           : typeof caseImages === 'string' 
             ? JSON.parse(caseImages || '[]') 
             : [];
 
-        // ИСПРАВЛЕНО: Если файл загружен в S3 — пушим, иначе берем текущий массив
-        savePayload.case_images = localFile && finalFileUrl ? [...currentImages, finalFileUrl] : currentImages;
+        // Сохраняем ролик/фото в галерею кейса
+        savePayload.case_images = localFile && finalFileUrl ? [...safeCaseImages, finalFileUrl] : safeCaseImages;
         
-        savePayload.content = formData.content?.startsWith('/videos/') ? '' : (formData.content || '');
+        // ИСПРАВЛЕНО: Для кейса поле content должно содержать строго описание ситуации (текст из инпута),
+        // полностью исключая попадание туда временных blob-ссылок фронтенда
+        if (formData.content?.startsWith('blob:') || formData.content?.startsWith('/videos/') || formData.content?.includes('video_')) {
+          savePayload.content = ''; // Если там была ссылка на медиа — зануляем, контент кейса идет в галерею
+        } else {
+          savePayload.content = formData.content || '';
+        }
 
         savePayload.case_details = {
           duration: (duration || '').trim(),
           resultText: (resultText || '').trim(),
-          products: (products || '').split(',').map(p => p.trim()).filter(Boolean)
+          products: (products || '').split(',').map((p: string) => p.trim()).filter(Boolean)
         };
       } else if (formData.type === 'video') {
         if (localFile && finalFileUrl) {
