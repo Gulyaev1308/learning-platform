@@ -28,11 +28,26 @@ export function CaseLesson({ lesson, onComplete, isCompleted }: CaseLessonProps)
   // Распознаем видео нативно и безошибочно
   const isVideo = (url: string) => /\.(mp4|webm|ogg)/i.test(url) || url.includes('video_') || url.includes('/api/videos/');
 
-  // ИСПРАВЛЕНО УНИВЕРСАЛЬНО: Корректно переключает пути, сохраняя плеер как для прокси, так и для прямых CDN ссылок без query-строк
+  // ИСПРАВЛЕНО ИДЕАЛЬНО: Вытаскиваем чистое имя файла из S3-ссылки и пускаем через стабильный локальный прокси
   const getVideoSrc = (url: string) => {
     if (!url) return '';
-    if (url.startsWith('/api/')) return url;
-    return url.split('?')[0]; 
+    // Если путь уже является прокси-ссылкой, отдаем как есть
+    if (url.startsWith('/api/videos/')) return url;
+    
+    try {
+      // Находим имя файла (все, что после последнего слэша, но до знака вопроса)
+      const urlWithoutQuery = url.split('?')[0];
+      const parts = urlWithoutQuery.split('/');
+      const fileName = parts[parts.length - 1];
+      
+      if (fileName && fileName.includes('video_')) {
+        return `/api/videos/${fileName}`;
+      }
+    } catch (e) {
+      console.error('Ошибка парсинга ссылки видео:', e);
+    }
+    
+    return url; // Фолбэк, если ссылка нестандартная
   };
 
   return (
@@ -50,7 +65,7 @@ export function CaseLesson({ lesson, onComplete, isCompleted }: CaseLessonProps)
         <div className="mb-8">
           <div className="relative w-full h-[350px] md:h-[450px] rounded-xl overflow-hidden bg-black flex items-center justify-center border border-slate-200 dark:border-slate-700">
             {isVideo(images[activeImageIndex]) ? (
-              /* НАСТОЯЩИЙ ИНТЕРАКТИВНЫЙ ПЛЕЕР ДЛЯ СТУДЕНТА: Нативные элементы управления, пауза, перемотка и fullscreen */
+              /* НАСТОЯЩИЙ ИНТЕРАКТИВНЫЙ ПЛЕЕР: Стриминг чанками без зависаний со звуком и нативным fullscreen */
               <video 
                 key={images[activeImageIndex]}
                 src={getVideoSrc(images[activeImageIndex])} 
