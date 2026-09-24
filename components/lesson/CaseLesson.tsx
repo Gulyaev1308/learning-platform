@@ -24,21 +24,25 @@ export function CaseLesson({ lesson, onComplete, isCompleted }: CaseLessonProps)
   const products = details.products || [];
   
   const [activeImageIndex, setActiveImageIndex] = useState(0);
-  const mediaContainerRef = useRef<HTMLDivElement>(null);
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const imageRef = useRef<HTMLImageElement>(null);
 
+  // Универсальная функция для точного определения видео по расширению или URL-прокси
   const isVideo = (url: string) => /\.(mp4|webm|ogg)\$/i.test(url) || url.includes('/api/videos/');
 
-  // Функция для открытия текущего медиафайла на весь экран
+  // Полноэкранный режим для фото или видео
   const handleFullScreen = () => {
-    if (mediaContainerRef.current) {
-      if (mediaContainerRef.current.requestFullscreen) {
-        mediaContainerRef.current.requestFullscreen();
-      } else if ((mediaContainerRef.current as any).mozRequestFullScreen) { /* Firefox */
-        (mediaContainerRef.current as any).mozRequestFullScreen();
-      } else if ((mediaContainerRef.current as any).webkitRequestFullscreen) { /* Chrome, Safari & Opera */
-        (mediaContainerRef.current as any).webkitRequestFullscreen();
-      } else if ((mediaContainerRef.current as any).msRequestFullscreen) { /* IE/Edge */
-        (mediaContainerRef.current as any).msRequestFullscreen();
+    const currentMedia = isVideo(images[activeImageIndex]) ? videoRef.current : imageRef.current;
+    
+    if (currentMedia) {
+      if (currentMedia.requestFullscreen) {
+        currentMedia.requestFullscreen();
+      } else if ((currentMedia as any).mozRequestFullScreen) {
+        (currentMedia as any).mozRequestFullScreen();
+      } else if ((currentMedia as any).webkitRequestFullscreen) {
+        (currentMedia as any).webkitRequestFullscreen();
+      } else if ((currentMedia as any).msRequestFullscreen) {
+        (currentMedia as any).msRequestFullscreen();
       }
     }
   };
@@ -56,22 +60,23 @@ export function CaseLesson({ lesson, onComplete, isCompleted }: CaseLessonProps)
 
       {images.length > 0 && (
         <div className="mb-8">
-          {/* Контейнер медиа с рефом для полноэкранного режима */}
-          <div 
-            ref={mediaContainerRef}
-            className="relative w-full h-[350px] md:h-[450px] rounded-xl overflow-hidden bg-slate-50 dark:bg-slate-800/50 flex items-center justify-center border border-slate-200 dark:border-slate-700"
-          >
+          {/* Главное окно просмотра медиафайла */}
+          <div className="relative w-full h-[350px] md:h-[450px] rounded-xl overflow-hidden bg-black flex items-center justify-center border border-slate-200 dark:border-slate-700">
             {isVideo(images[activeImageIndex]) ? (
-              // Полноценный видеоплеер с возможностью ставить на паузу, перематывать и разворачивать
+              // НАСТОЯЩИЙ ИНТЕРАКТИВНЫЙ ПЛЕЕР: Пауза, перемотка, регулировка звука и нативный fullscreen
               <video 
+                ref={videoRef}
                 key={images[activeImageIndex]}
                 src={images[activeImageIndex]} 
                 controls 
                 preload="metadata"
-                className="w-full h-full object-contain bg-black" 
+                playsInline
+                controlsList="nodownload"
+                className="w-full h-full object-contain" 
               />
             ) : (
               <img 
+                ref={imageRef}
                 src={images[activeImageIndex]} 
                 alt={`Результат \${activeImageIndex + 1}`} 
                 className="w-full h-full object-contain transition-all duration-300"
@@ -84,16 +89,17 @@ export function CaseLesson({ lesson, onComplete, isCompleted }: CaseLessonProps)
               </span>
             )}
 
-            {/* Кнопка для вызова полноэкранного режима просмотра */}
+            {/* Кнопка ручного открытия во весь экран для картинок и видео */}
             <button 
               onClick={handleFullScreen}
-              className="absolute bottom-4 right-4 bg-black/70 hover:bg-black/90 text-white p-2 rounded-lg text-xs font-semibold transition"
+              className="absolute bottom-4 right-4 bg-black/70 hover:bg-black/90 text-white px-3 py-1.5 rounded-lg text-xs font-semibold transition z-10"
               title="Открыть на весь экран"
             >
               🖥️ На весь экран
             </button>
           </div>
 
+          {/* Галерея миниатюр под плеером */}
           {images.length > 1 && (
             <div className="flex gap-2 mt-3 overflow-x-auto pb-2">
               {images.map((img, idx) => (
@@ -143,6 +149,7 @@ export function CaseLesson({ lesson, onComplete, isCompleted }: CaseLessonProps)
 
         <div className="md:col-span-2 space-y-4">
           <div className="prose dark:prose-invert max-w-none">
+            {/* ЗАГОЛОВОК ИСПРАВЛЕН: Полностью соответствует админке */}
             <h3 className="text-lg font-bold text-slate-800 dark:text-slate-200 mb-2">Полная история и разбор кейса (основной текст):</h3>
             <p className="text-slate-600 dark:text-slate-300 whitespace-pre-line leading-relaxed text-sm">
               {lesson.content}

@@ -471,15 +471,22 @@ function LessonForm({ lesson, onSave, onCancel }: any) {
       // Формируем базовый объект для сохранения
       const savePayload: any = { ...formData, quiz_data, homework_data };
 
-      // ИСПРАВЛЕНО: Если это создание нового урока, удаляем order_index, чтобы бэкенд рассчитал его автоматически
+      // Если это создание нового урока, удаляем order_index, чтобы бэкенд рассчитал его автоматически
       if (!formData.id) {
         delete savePayload.order_index;
       }
 
-      // СТРОГОЕ РАЗДЕЛЕНИЕ ТИПОВ УРОКОВ (Точечный фикс)
+      // СТРОГОЕ РАЗДЕЛЕНИЕ ТИПОВ УРОКОВ (Отредактировано)
       if (formData.type === 'case') {
-        // 1. Если это КЕЙС, то загруженный файл — это картинка результата. Пушим её в массив картинок.
-        savePayload.case_images = localFile && finalFileUrl ? [...caseImages, finalFileUrl] : caseImages;
+        // ИСПРАВЛЕНО: Предотвращаем сбой мутации. Безопасное приведение к массиву.
+        const safeCaseImages = Array.isArray(caseImages) 
+          ? caseImages 
+          : typeof caseImages === 'string' 
+            ? JSON.parse(caseImages || '[]') 
+            : [];
+
+        // Если добавлен новый файл (фото/видео), пушим его в галерею кейса, иначе оставляем текущие
+        savePayload.case_images = localFile && finalFileUrl ? [...safeCaseImages, finalFileUrl] : safeCaseImages;
         
         // Поле content для кейса оставляем пустым или сохраняем то, что ввел админ в текстовое поле
         savePayload.content = formData.content.startsWith('/videos/') ? '' : formData.content;
