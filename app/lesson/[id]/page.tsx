@@ -169,15 +169,15 @@ export default function LessonPage() {
           </div>
         )}
 
-        {/* ИСПРАВЛЕНО ЖЕСТКО: Для кейсов полностью вырезаем старый блок, предотвращая кэширование надписи */}
-        {lesson.type !== 'case' ? (
+        {/* ИСПРАВЛЕНО: Текст "Материал урока" отображается ТОЛЬКО для обычных уроков, для кейсов он скрыт */}
+        {lesson && lesson.type !== 'case' && (
           <div className="mb-6">
-            <h2 className="text-base font-bold text-gray-900 mb-2">Полная история и разбор кейса:</h2>
+            <h2 className="text-base font-bold text-gray-900 mb-2">Материал урока:</h2>
             <p className="text-slate-600 dark:text-slate-300 whitespace-pre-line leading-relaxed text-sm">
               {lesson.content}
             </p>
           </div>
-        ) : null}
+        )}      
 
         {lesson.description && (
           <div className="bg-gray-50 p-6 rounded-2xl border border-gray-200">
