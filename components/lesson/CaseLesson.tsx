@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 
 interface CaseLessonProps {
   lesson: {
@@ -19,13 +19,24 @@ interface CaseLessonProps {
 }
 
 export function CaseLesson({ lesson, onComplete, isCompleted }: CaseLessonProps) {
-  const images = lesson.case_images || [];
-  const details = lesson.case_details || { products: [], duration: '', resultText: '' };
+  // Безопасно парсим картинки. Если это строка JSON (из базы), принудительно переводим в массив
+  const images = Array.isArray(lesson?.case_images) 
+    ? lesson.case_images 
+    : typeof lesson?.case_images === 'string'
+      ? JSON.parse(lesson.case_images || '[]')
+      : [];
+
+  const details = lesson?.case_details || { products: [], duration: '', resultText: '' };
   const products = details.products || [];
   
   const [activeImageIndex, setActiveImageIndex] = useState(0);
 
-  // ИСПРАВЛЕНО НАДЕЖНО: Проверяем наличие расширения видео в любой части строки URL, игнорируя query-параметры S3
+  // Сбрасываем индекс активного медиафайла на 0, если переключились на совершенно другой кейс
+  useEffect(() => {
+    setActiveImageIndex(0);
+  }, [lesson?.id]);
+
+  // Проверка типа файла (фото или видео)
   const isVideo = (url: string) => {
     if (!url) return false;
     const lowerUrl = url.toLowerCase();
@@ -39,15 +50,14 @@ export function CaseLesson({ lesson, onComplete, isCompleted }: CaseLessonProps)
           🌱 Практический Кейс / Результат
         </span>
         <h1 className="text-2xl md:text-3xl font-bold text-slate-800 dark:text-white mt-2">
-          {lesson.title}
+          {lesson?.title}
         </h1>
       </div>
 
-      {images.length > 0 && (
+      {images.length > 0 ? (
         <div className="mb-8">
           <div className="relative w-full h-[350px] md:h-[450px] rounded-xl overflow-hidden bg-black flex items-center justify-center border border-slate-200 dark:border-slate-700">
             {isVideo(images[activeImageIndex]) ? (
-              /* ИСПРАВЛЕНО: Оригинальный S3 URL. Мгновенный стриминг, элементы управления, звук и перемотка без зависаний контейнера */
               <video 
                 key={images[activeImageIndex]}
                 src={images[activeImageIndex]} 
@@ -72,9 +82,11 @@ export function CaseLesson({ lesson, onComplete, isCompleted }: CaseLessonProps)
             )}
           </div>
 
+          {/* Галерея миниатюр под плеером */}
           {images.length > 1 && (
             <div className="flex gap-2 mt-3 overflow-x-auto pb-2">
-              {images.map((img, idx) => (
+              {/* ИСПРАВЛЕНО: Добавлена строгая типизация (img: string, idx: number) */}
+              {images.map((img: string, idx: number) => (
                 <button
                   key={idx}
                   onClick={() => setActiveImageIndex(idx)}
@@ -93,6 +105,10 @@ export function CaseLesson({ lesson, onComplete, isCompleted }: CaseLessonProps)
               ))}
             </div>
           )}
+        </div>
+      ) : (
+        <div className="mb-8 w-full h-[350px] md:h-[450px] bg-slate-100 dark:bg-slate-800 rounded-xl flex items-center justify-center text-gray-400 text-sm animate-pulse">
+          Загрузка медиаматериалов кейса...
         </div>
       )}
 
@@ -123,7 +139,7 @@ export function CaseLesson({ lesson, onComplete, isCompleted }: CaseLessonProps)
           <div className="prose dark:prose-invert max-w-none">
             <h3 className="text-lg font-bold text-slate-800 dark:text-slate-200 mb-2">Полная история и разбор кейса (основной текст):</h3>
             <p className="text-slate-600 dark:text-slate-300 whitespace-pre-line leading-relaxed text-sm">
-              {lesson.content}
+              {lesson?.content}
             </p>
           </div>
 
