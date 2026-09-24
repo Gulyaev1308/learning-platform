@@ -169,13 +169,17 @@ export default function LessonPage() {
           </div>
         )}
 
-        {/* ИСПРАВЛЕНО: Текст "Материал урока" отображается ТОЛЬКО для обычных уроков, для кейсов он скрыт */}
+        {/* ИСПРАВЛЕНО: Для видеоуроков скрываем текст контента (ссылку), для кейсов блок скрыт полностью, а для текста — отображается описание */}
         {lesson && lesson.type !== 'case' && (
           <div className="mb-6">
             <h2 className="text-base font-bold text-gray-900 mb-2">Материал урока:</h2>
-            <p className="text-slate-600 dark:text-slate-300 whitespace-pre-line leading-relaxed text-sm">
-              {lesson.content}
-            </p>
+            {lesson.type !== 'video' ? (
+              <p className="text-slate-600 dark:text-slate-300 whitespace-pre-line leading-relaxed text-sm">
+                {lesson.content}
+              </p>
+            ) : (
+              <p className="text-slate-500 text-sm italic">Изучите видеоматериал выше</p>
+            )}
           </div>
         )}      
 

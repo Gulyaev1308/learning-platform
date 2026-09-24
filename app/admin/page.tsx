@@ -463,46 +463,40 @@ function LessonForm({ lesson, onSave, onCancel }: any) {
       // Логируем финальное состояние перед сборкой payload для PostgreSQL
       console.log(`[SUBMIT_TRANS_LOG] Сборка payload. Тип урока: ${formData.type}, Итоговый URL файла: ${finalFileUrl}`);
 
-      // Формируем базовый объект для сохранения
       const savePayload: any = { ...formData, quiz_data, homework_data };
 
-      // Если это создание нового урока, удаляем order_index, чтобы бэкенд рассчитал его автоматически
       if (!formData.id) {
         delete savePayload.order_index;
       }
 
-      // СТРОГОЕ РАЗДЕЛЕНИЕ ТИПОВ УРОКОВ (Отредактировано)
+      // СТРОГОЕ РАЗДЕЛЕНИЕ ТИПОВ УРОКОВ (ИСПРАВЛЕНО ДЛЯ КЕЙСОВ С НУЛЯ)
       if (formData.type === 'case') {
-        // ИСПРАВЛЕНО: Предотвращаем сбой мутации. Безопасное приведение к массиву.
-        const safeCaseImages = Array.isArray(caseImages) 
+        // Безопасно собираем массив картинок/видео, исключая undefined и null при создании с нуля
+        const currentImages = Array.isArray(caseImages) 
           ? caseImages 
           : typeof caseImages === 'string' 
             ? JSON.parse(caseImages || '[]') 
             : [];
 
-        // Если добавлен новый файл (фото/видео), пушим его в галерею кейса, иначе оставляем текущие
-        savePayload.case_images = localFile && finalFileUrl ? [...safeCaseImages, finalFileUrl] : safeCaseImages;
+        // ИСПРАВЛЕНО: Если файл загружен в S3 — пушим, иначе берем текущий массив
+        savePayload.case_images = localFile && finalFileUrl ? [...currentImages, finalFileUrl] : currentImages;
         
-        // Поле content для кейса оставляем пустым или сохраняем то, что ввел админ в текстовое поле
-        savePayload.content = formData.content.startsWith('/videos/') ? '' : formData.content;
+        savePayload.content = formData.content?.startsWith('/videos/') ? '' : (formData.content || '');
 
         savePayload.case_details = {
-          duration: duration.trim(),
-          resultText: resultText.trim(),
-          products: products.split(',').map(p => p.trim()).filter(Boolean)
+          duration: (duration || '').trim(),
+          resultText: (resultText || '').trim(),
+          products: (products || '').split(',').map(p => p.trim()).filter(Boolean)
         };
       } else if (formData.type === 'video') {
-        // 2. Если это ВИДЕОУРОК, то в поле content должна улетать СТРОГО ссылка на наш API-прокси
         if (localFile && finalFileUrl) {
-          savePayload.content = finalFileUrl; // Сюда запишется рабочий путь /api/videos/video_xxxx.mp4
+          savePayload.content = finalFileUrl;
         } else {
           savePayload.content = formData.content;
         }
-        // Зануляем поля кейса, чтобы структура БД оставалась чистой
         savePayload.case_images = [];
         savePayload.case_details = null;
       } else {
-        // 3. Для текстовых или квиз уроков просто сохраняем контент как есть
         savePayload.content = formData.content;
         savePayload.case_images = [];
         savePayload.case_details = null;
