@@ -25,6 +25,9 @@ export function CaseLesson({ lesson, onComplete, isCompleted }: CaseLessonProps)
   
   const [activeImageIndex, setActiveImageIndex] = useState(0);
 
+  // Функция для проверки, является ли файл видеороликом
+  const isVideo = (url: string) => /\.(mp4|webm|ogg)\$/i.test(url) || url.includes('/api/videos/');
+
   return (
     <div className="w-full max-w-4xl mx-auto p-4 md:p-6 bg-white dark:bg-slate-900 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-800">
       <div className="mb-6">
@@ -39,17 +42,24 @@ export function CaseLesson({ lesson, onComplete, isCompleted }: CaseLessonProps)
       {images.length > 0 && (
         <div className="mb-8">
           <div className="relative w-full h-[350px] md:h-[450px] rounded-xl overflow-hidden bg-slate-50 dark:bg-slate-800/50 flex items-center justify-center border border-slate-200 dark:border-slate-700">
-            {images[activeImageIndex].match(/\.(mp4|webm|ogg)$/i) ? (
-              <video src={images[activeImageIndex]} controls className="w-full h-full object-contain" />
+            {isVideo(images[activeImageIndex]) ? (
+              // Полноценный плеер с элементами управления, отключенным скачиванием и корректным оверлеем
+              <video 
+                key={images[activeImageIndex]}
+                src={images[activeImageIndex]} 
+                controls 
+                controlsList="nodownload"
+                className="w-full h-full object-contain bg-black" 
+              />
             ) : (
               <img 
                 src={images[activeImageIndex]} 
-                alt={`Результат ${activeImageIndex + 1}`} 
+                alt={`Результат \${activeImageIndex + 1}`} 
                 className="w-full h-full object-contain transition-all duration-300"
               />
             )}
             
-            {images.length === 2 && (
+            {images.length === 2 && !isVideo(images[activeImageIndex]) && (
               <span className="absolute top-4 left-4 bg-slate-900/80 text-white px-3 py-1 text-sm font-bold rounded">
                 {activeImageIndex === 0 ? 'ФОТО: ДО' : 'ФОТО: ПОСЛЕ'}
               </span>
@@ -62,11 +72,18 @@ export function CaseLesson({ lesson, onComplete, isCompleted }: CaseLessonProps)
                 <button
                   key={idx}
                   onClick={() => setActiveImageIndex(idx)}
-                  className={`relative w-20 h-20 rounded-lg overflow-hidden flex-shrink-0 border-2 transition-all ${
+                  className={`relative w-20 h-20 rounded-lg overflow-hidden flex-shrink-0 border-2 transition-all \${
                     idx === activeImageIndex ? 'border-emerald-500 scale-95' : 'border-transparent opacity-60 hover:opacity-100'
                   }`}
                 >
-                  <img src={img} alt="Миниатюра" className="w-full h-full object-cover" />
+                  {isVideo(img) ? (
+                    // ИСПРАВЛЕНО: Вместо битой картинки для видео-миниатюры показываем заглушку с иконкой плеера
+                    <div className="w-full h-full bg-slate-800 flex flex-col items-center justify-center text-white text-[10px] p-1 font-bold">
+                      <span>▶ ВИДЕО</span>
+                    </div>
+                  ) : (
+                    <img src={img} alt="Миниатюра" className="w-full h-full object-cover" />
+                  )}
                 </button>
               ))}
             </div>
@@ -78,14 +95,14 @@ export function CaseLesson({ lesson, onComplete, isCompleted }: CaseLessonProps)
         <div className="md:col-span-1 space-y-4">
           {details.duration && (
             <div className="p-4 bg-slate-50 dark:bg-slate-800/40 rounded-xl border border-slate-100 dark:border-slate-800">
-              <h4 className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Срок применения:</h4>
+              <h4 className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Срок применения программы БАД:</h4>
               <p className="text-base font-bold text-slate-700 dark:text-slate-200 mt-1">⏱ {details.duration}</p>
             </div>
           )}
 
           {products.length > 0 && (
             <div className="p-4 bg-emerald-50/50 dark:bg-emerald-950/20 rounded-xl border border-emerald-100 dark:border-emerald-900/30">
-              <h4 className="text-xs font-semibold text-emerald-700 dark:text-emerald-400 uppercase tracking-wider mb-2">Использовано в схеме:</h4>
+              <h4 className="text-xs font-semibold text-emerald-700 dark:text-emerald-400 uppercase tracking-wider mb-2">Продукты Siberian Wellness:</h4>
               <div className="flex flex-wrap gap-1.5">
                 {products.map((product: string, i: number) => (
                   <span key={i} className="px-2.5 py-1 bg-white dark:bg-slate-800 text-xs font-medium text-slate-700 dark:text-slate-300 rounded-md border border-slate-200 dark:border-slate-700 shadow-sm">
@@ -99,7 +116,8 @@ export function CaseLesson({ lesson, onComplete, isCompleted }: CaseLessonProps)
 
         <div className="md:col-span-2 space-y-4">
           <div className="prose dark:prose-invert max-w-none">
-            <h3 className="text-lg font-bold text-slate-800 dark:text-slate-200 mb-2">Описание ситуации и динамика:</h3>
+            {/* ИСПРАВЛЕНО: Название блока теперь строго соответствует административной панели */}
+            <h3 className="text-lg font-bold text-slate-800 dark:text-slate-200 mb-2">Полная история и разбор кейса (основной текст):</h3>
             <p className="text-slate-600 dark:text-slate-300 whitespace-pre-line leading-relaxed text-sm">
               {lesson.content}
             </p>
@@ -107,7 +125,7 @@ export function CaseLesson({ lesson, onComplete, isCompleted }: CaseLessonProps)
 
           {details.resultText && (
             <div className="mt-4 p-4 bg-blue-50 dark:bg-blue-950/20 border border-blue-100 dark:border-blue-900/30 rounded-xl">
-              <h4 className="font-bold text-blue-900 dark:text-blue-400 text-xs uppercase tracking-wider mb-1">Резюме эксперта:</h4>
+              <h4 className="font-bold text-blue-900 dark:text-blue-400 text-xs uppercase tracking-wider mb-1">Итоговый вывод / Главный бизнес-инсайт:</h4>
               <p className="text-blue-800 dark:text-blue-300 text-sm leading-relaxed">{details.resultText}</p>
             </div>
           )}
@@ -118,7 +136,7 @@ export function CaseLesson({ lesson, onComplete, isCompleted }: CaseLessonProps)
         <button
           onClick={onComplete}
           disabled={isCompleted}
-          className={`px-6 py-2.5 rounded-xl font-medium text-sm transition-all shadow-sm ${
+          className={`px-6 py-2.5 rounded-xl font-medium text-sm transition-all shadow-sm \${
             isCompleted
               ? 'bg-slate-100 text-slate-400 cursor-not-allowed dark:bg-slate-800 dark:text-slate-600'
               : 'bg-emerald-600 text-white hover:bg-emerald-700 active:scale-98'

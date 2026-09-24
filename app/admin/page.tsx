@@ -561,7 +561,7 @@ function LessonForm({ lesson, onSave, onCancel }: any) {
                   Загрузить фото/видео результатов (До/После)
                 </label>
                 <label className="block cursor-pointer bg-emerald-100 hover:bg-emerald-200 border-2 border-dashed border-emerald-400 rounded-lg p-4 text-center">
-                  <span className="text-emerald-800 font-bold">📸 Нажмите для добавления файла в галерею кейса</span>
+                  <span className="text-emerald-800 font-bold">📸 / 🎥 Нажмите для добавления фото или видео в галерею кейса</span>
                   <input type="file" accept="image/*,video/*" onChange={(e) => { const file = e.target.files ? e.target.files[0] : null; if(file) { setLocalFile(file); console.log("[FRONTEND_LOG] Файл кейса выбран:", file.name); } }} className="hidden" />
                 </label>
                 {uploading && <p className="text-emerald-700 text-sm mt-1 font-semibold">Загрузка...</p>}
