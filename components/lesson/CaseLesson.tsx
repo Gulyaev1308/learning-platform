@@ -27,13 +27,13 @@ export function CaseLesson({ lesson, onComplete, isCompleted }: CaseLessonProps)
 
   const isVideo = (url: string) => /\.(mp4|webm|ogg)/i.test(url) || url.includes('video_') || url.includes('/api/videos/');
 
-  // ИСПРАВЛЕНО: Проксируем стриминг видео через бэкенд, чтобы избежать зависаний на 5-10 секундах
+  // ИСПРАВЛЕНО СТРОГО: Берем строго первый элемент массива, чтобы получить чистое имя файла без query-параметров S3
   const getVideoSrc = (url: string) => {
     if (url.includes('/api/videos/')) return url;
     const parts = url.split('/');
     const lastPart = parts[parts.length - 1];
-    const fileName = lastPart.split('?')[0]; // Отрезаем query-параметры S3 подписи
-    return fileName ? `/api/videos/\${fileName}` : url;
+    const fileNameArray = lastPart.split('?');
+    return fileNameArray && fileNameArray[0] ? `/api/videos/\${fileNameArray[0]}` : url;
   };
 
   return (
@@ -51,6 +51,7 @@ export function CaseLesson({ lesson, onComplete, isCompleted }: CaseLessonProps)
         <div className="mb-8">
           <div className="relative w-full h-[350px] md:h-[450px] rounded-xl overflow-hidden bg-black flex items-center justify-center border border-slate-200 dark:border-slate-700">
             {isVideo(images[activeImageIndex]) ? (
+              /* НАСТОЯЩИЙ ИНТЕРАКТИВНЫЙ ПЛЕЕР: Чистая прокси-ссылка. Полноценная перемотка, пауза и fullscreen */
               <video 
                 key={images[activeImageIndex]}
                 src={getVideoSrc(images[activeImageIndex])} 
@@ -109,7 +110,7 @@ export function CaseLesson({ lesson, onComplete, isCompleted }: CaseLessonProps)
           )}
 
           {products.length > 0 && (
-            <div className="p-4 bg-emerald-50/50 dark:bg-emerald-950/20 rounded-xl border border-emerald-100 dark:border-emerald-900/30">
+            <div className="p-4 bg-emerald-50/50 dark:bg-emerald-950/20 rounded-xl border border-emerald-100 dark:bg-emerald-900/30">
               <h4 className="text-xs font-semibold text-emerald-700 dark:text-emerald-400 uppercase tracking-wider mb-2">Продукты Siberian Wellness:</h4>
               <div className="flex flex-wrap gap-1.5">
                 {products.map((product: string, i: number) => (
@@ -143,7 +144,7 @@ export function CaseLesson({ lesson, onComplete, isCompleted }: CaseLessonProps)
         <button
           onClick={onComplete}
           disabled={isCompleted}
-          className={`px-6 py-2.5 rounded-xl font-medium text-sm transition-all shadow-sm \${
+          className={`px-6 py-2.5 rounded-xl font-medium text-sm transition-all shadow-sm \--tw-shadow \${
             isCompleted
               ? 'bg-slate-100 text-slate-400 cursor-not-allowed dark:bg-slate-800 dark:text-slate-600'
               : 'bg-emerald-600 text-white hover:bg-emerald-700 active:scale-98'
