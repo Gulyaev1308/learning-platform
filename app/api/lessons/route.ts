@@ -14,7 +14,7 @@ export async function GET(request: NextRequest) {
     }
 
     const currentUserId = session.userId || (session as any).id;
-    const userResult = await db.query('SELECT id, email, name, role, leader_id FROM users WHERE id = $1', [currentUserId]);
+    const userResult = await db.query('SELECT id, email, name, role, leader_id FROM users WHERE id = \$1', [currentUserId]);
     
     if (userResult.rows.length === 0) {
       return NextResponse.json({ error: 'Пользователь не найден' }, { status: 404 });
@@ -38,11 +38,10 @@ export async function GET(request: NextRequest) {
 
     // 2. Вытягиваем ОДОБРЕННЫЕ платежи
     const paymentsResult = await db.query(
-      "SELECT block_id, status FROM premium_access WHERE user_id = $1",
+      "SELECT block_id, status FROM premium_access WHERE user_id = \$1",
       [currentUserId]
     );
     
-    // ИСПРАВЛЕНО: Принудительное приведение к Number, чтобы Set.has() работал корректно
     const approvedBlockIds = new Set(
       paymentsResult.rows
         .filter(r => r.status === 'approved')
@@ -51,7 +50,7 @@ export async function GET(request: NextRequest) {
 
     // 3. Получаем список пройденных уроков
     const progressResult = await db.query(
-      "SELECT lesson_id FROM progress WHERE user_id = $1 AND status = 'completed'",
+      "SELECT lesson_id FROM progress WHERE user_id = \$1 AND status = 'completed'",
       [currentUserId]
     );
     const completedIds = new Set(progressResult.rows.map(r => r.lesson_id));
@@ -62,16 +61,16 @@ export async function GET(request: NextRequest) {
     const lessonsWithStatus = allLessonsResult.rows.map((lesson, index) => {
       const isCompleted = completedIds.has(lesson.lesson_id);
       
+      // ИСПРАВЛЕНО: Никаких проверок по тексту названия. Только строгое булево значение поля БД.
       const isPremiumBlock = 
         lesson.block_is_premium === true || 
         lesson.block_is_premium === 'true' ||
-        lesson.block_is_premium === 1 ||
-        String(lesson.block_title).toLowerCase().includes('платный');
+        lesson.block_is_premium === 1;
 
-      // ИСПРАВЛЕНО: Проверка в Set идет строго по числовому типу ID
       const hasLeaderApproved = approvedBlockIds.has(Number(lesson.block_id));
       
-      const isLockedByPayment = user.role === 'student' && isPremiumBlock && !hasLeaderApproved && !isCompleted;
+      // ИСПРАВЛЕНО: Блок блокируется оплатой ТОЛЬКО если он премиальный И лидер НЕ дал аппрув
+      const isLockedByPayment = user.role === 'student' && isPremiumBlock && !hasLeaderApproved;
 
       let status: string;
 
@@ -80,9 +79,11 @@ export async function GET(request: NextRequest) {
       } else if (isLockedByPayment) {
         status = 'locked';
       } else if (!foundFirstUncompleted) {
+        // Первый еще не пройденный урок среди открытых/бесплатных блоков становится доступным
         status = 'available';
         foundFirstUncompleted = true;
       } else {
+        // Все последующие уроки ждут прохождения предыдущего по "лестнице"
         status = 'locked';
       }
 
@@ -97,7 +98,7 @@ export async function GET(request: NextRequest) {
         title: lesson.lesson_title,
         type: lesson.lesson_type,
         order_index: lesson.lesson_order,
-        block_id: Number(lesson.block_id), // Приводим к числу для фронтенда
+        block_id: Number(lesson.block_id),
         block_title: lesson.block_title,
         block_is_premium: isPremiumBlock,
         module_title: lesson.module_title,
